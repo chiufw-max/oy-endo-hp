@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>歐葉診所 - HP相機系統</title>
+  <style>
+    body { font-family: 'Microsoft JhengHei', sans-serif; background: #f4f7f6; margin:0; padding:15px; }
+    #patient-list { max-width: 600px; margin: 0 auto; }
+    .card { background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #3498db; }
+    .btn-action { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; }
+    
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; padding: 10px; box-sizing: border-box; }
+    .modal-content { background: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 500px; max-height: 95vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; font-weight: bold; margin-bottom: 5px; color: #34495e; }
+    input[type="date"] { width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+    
+    .radio-group { display: flex; gap: 10px; }
+    .radio-group label { flex: 1; position: relative; cursor: pointer; }
+    .radio-group input[type="radio"] { position: absolute; opacity: 0; }
+    .radio-label { display: block; padding: 12px; text-align: center; background: #ecf0f1; border-radius: 8px; font-weight: bold; color: #7f8c8d; border: 2px solid transparent; transition: 0.2s; }
+    input[type="radio"]:checked + .radio-label.pos { background: #e74c3c; color: white; border-color: #c0392b; }
+    input[type="radio"]:checked + .radio-label.neg { background: #2ecc71; color: white; border-color: #27ae60; }
+    
+    .camera-btn { display: block; width: 100%; padding: 12px; text-align: center; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; box-sizing: border-box; }
+    .submit-btn { width: 100%; padding: 14px; background: #2ecc71; color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+    
+    #loading { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); justify-content: center; align-items: center; z-index: 2000; font-size: 24px; font-weight: bold; color: #2c3e50; flex-direction: column; }
+    .spinner { border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div id="patient-list">讀取中...</div>
+  
+  <div id="loading">
+    <div class="spinner"></div>
+    <div>資料處理中，請稍候...</div>
+  </div>
+
+  <div class="modal" id="report-modal">
+    <div class="modal-content">
+      <h2 style="margin-top:0; border-bottom: 2px solid #eee; padding-bottom: 10px;">HP 報告輸入</h2>
+      <p style="font-size: 20px;">病患：<strong id="m-name" style="color:#e67e22;"></strong></p>
+      
+      <div class="form-group">
+        <label>報告產出日期：</label>
+        <input type="date" id="reportDate">
+      </div>
+
+      <div class="form-group">
+        <label>判讀結果：</label>
+        <div class="radio-group">
+          <label><input type="radio" name="hpResult" value="陽性 (Positive)"><div class="radio-label pos">陽性 (+)</div></label>
+          <label><input type="radio" name="hpResult" value="陰性 (Negative)"><div class="radio-label neg">陰性 (-)</div></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>試紙照片紀錄 (必填)：</label>
+        
+        <div id="cameraArea" style="display:none; margin-bottom:10px; position:relative;">
+          <video id="video" width="100%" height="auto" autoplay playsinline style="border-radius:8px; background:#000;"></video>
+          <button type="button" class="submit-btn" style="background:#e67e22; position:absolute; bottom:10px; left:50%; transform:translateX(-50%); width:auto; padding:10px 30px;" onclick="takeSnapshot()">📸 拍照</button>
+        </div>
+
+        <div id="cameraButtons" style="display: flex; gap: 10px;">
+          <label class="camera-btn" style="flex:1; background:#3498db; color:white; border:none;" onclick="startCamera()">
+            🖥️ 電腦鏡頭
+          </label>
+          <label class="camera-btn" style="flex:1; background:#2ecc71; color:white; border:none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            📱 手機拍攝 / 上傳
+            <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handleFileUpload(event)">
+          </label>
+        </div>
+
+        <div id="previewContainer" style="display:none; text-align:center; margin-top:15px;">
+          <img id="photoPreview" style="max-width:100%; max-height:250px; border:2px solid #ccc; border-radius:8px;">
+          <p style="color:#7f8c8d; font-size:14px; margin-top:5px;">(已選取照片)</p>
+        </div>
+      </div>
+     
+      <div style="display: flex; gap: 10px;">
+        <button class="submit-btn" style="background:#95a5a6; flex:1;" onclick="closeModal()">取消</button>
+        <button class="submit-btn" style="flex:2;" onclick="submitReport()">💾 產出報告</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟
+    // 請將下方引號內的網址，換成您剛剛部署 GAS 獲得的 /exec 網址
+    const API_URL = "https://script.google.com/macros/s/AKfycbzPr9iaO6jESxJGhxiHddy2BKK0yvdxXIoxT4XCjNYlfu0O6nsX02-uUzy8apGf1f85Mw/exec"; 
+    // 🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟
+
+    let currentData = {};
+    let base64Photo = "";
+    let stream = null;
+
+    window.onload = loadList;
+
+    // 取得病患清單
+    function loadList() {
+      document.getElementById('patient-list').innerHTML = "<h3 style='text-align:center;'>讀取中...</h3>";
+      
+      fetch(API_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: "getPendingList" })
+      })
+      .then(response => response.json())
+      .then(res => {
+        if (res.status === 'success') renderList(res.data);
+        else document.getElementById('patient-list').innerHTML = `<h3 style='color:#e74c3c; text-align:center;'>❌ 讀取失敗：${res.message}</h3>`;
+      })
+      .catch(err => {
+        document.getElementById('patient-list').innerHTML = `<h3 style='color:#e74c3c; text-align:center;'>❌ 網路連線錯誤</h3>`;
+      });
+    }
+
+    function renderList(patients) {
+      const container = document.getElementById('patient-list');
+      if (patients.length === 0) return container.innerHTML = "<h3 style='text-align:center; color:#7f8c8d;'>目前無待判讀名單</h3>";
+      
+      patients.sort((a, b) => a.rawDate - b.rawDate);
+      let html = "";
+      let currentDate = ""; 
+
+      patients.forEach(p => {
+        if (p.date !== currentDate) {
+          html += `
+            <div style="display: flex; align-items: center; margin: 30px 0 15px 0;">
+              <div style="background: #486c9f; color: white; padding: 6px 18px; border-radius: 20px; font-weight: bold;">📅 ${p.date}</div>
+              <div style="flex-grow: 1; height: 2px; background: #dce4ec; margin-left: 15px;"></div>
+            </div>`;
+          currentDate = p.date;
+        }
+        html += `
+          <div class="card">
+            <div>
+              <div style="font-size: 24px; font-weight: bold; color: #2c3e50;">${p.name}</div>
+              <div style="color: #7f8c8d; margin-top: 5px; font-size: 15px;">執行醫師：${p.doctor}</div>
+            </div>
+            <button class="btn-action" onclick="openModal(${p.row}, '${p.name}', '${p.doctor}', '${p.rawDate}')">輸入報告</button>
+          </div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    function openModal(row, name, doctor, rawDate) {
+      currentData.row = row;
+      document.getElementById('m-name').innerHTML = `${name} <span style="font-size:16px; color:#7f8c8d; font-weight:normal;">(醫師：${doctor})</span>`;
+      
+      let d = new Date(parseInt(rawDate)); d.setDate(d.getDate() + 1);
+      let yyyy = d.getFullYear(), mm = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0');
+      document.getElementById('reportDate').value = `${yyyy}-${mm}-${dd}`;
+      
+      document.querySelector('input[name="hpResult"]:checked')?.removeAttribute('checked'); 
+      base64Photo = ""; document.getElementById('previewContainer').style.display = 'none';
+      document.getElementById('report-modal').style.display = 'flex';
+    }
+
+    // 相機邏輯
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+        const video = document.getElementById('video');
+        video.srcObject = stream;
+        document.getElementById('cameraArea').style.display = 'block';
+        document.getElementById('cameraButtons').style.display = 'none';
+      } catch (err) { alert("無法開啟攝影機：" + err.message); }
+    }
+
+    function takeSnapshot() {
+      const video = document.getElementById('video');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      base64Photo = canvas.toDataURL('image/jpeg', 0.8);
+      document.getElementById('photoPreview').src = base64Photo;
+      document.getElementById('previewContainer').style.display = 'block';
+      stopCamera();
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > 800) { h = Math.round((h * 800) / w); w = 800; }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          base64Photo = canvas.toDataURL('image/jpeg', 0.8);
+          document.getElementById('photoPreview').src = base64Photo;
+          document.getElementById('previewContainer').style.display = 'block';
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function stopCamera() {
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      document.getElementById('cameraArea').style.display = 'none';
+      document.getElementById('cameraButtons').style.display = 'flex';
+    }
+
+    function closeModal() { stopCamera(); document.getElementById('report-modal').style.display = 'none'; }
+
+    // 提交報告
+    function submitReport() {
+      const resultOpt = document.querySelector('input[name="hpResult"]:checked');
+      if (!resultOpt) return alert("請選擇判讀結果！");
+      if (!base64Photo) return alert("請拍攝照片！");
+
+      currentData.reportDate = document.getElementById('reportDate').value;
+      currentData.hpResult = resultOpt.value;
+      currentData.photoBase64 = base64Photo;
+
+      document.getElementById('report-modal').style.display = 'none';
+      document.getElementById('loading').style.display = 'flex';
+
+      fetch(API_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: "submitReport", payload: currentData })
+      })
+      .then(response => response.json())
+      .then(res => {
+        document.getElementById('loading').style.display = 'none';
+        if(res.status === 'success') { alert("報告產出成功！"); loadList(); } 
+        else alert("錯誤：" + res.message);
+      })
+      .catch(err => {
+        document.getElementById('loading').style.display = 'none'; 
+        alert("網路錯誤，請稍後再試");
+      });
+    }
+  </script>
+</body>
+</html>
