@@ -44,7 +44,22 @@
       margin-bottom: 5px;
       display: inline-block;
     }
+    /* 🌟 HP 輸入視窗內的 Hover 互動效果 🌟 */
     
+    /* 1. 陰性/陽性按鈕 */
+    .radio-label { transition: all 0.2s ease; }
+    .radio-label:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); filter: brightness(0.98); }
+    
+    /* 2. 拍照/上傳按鈕 (原本已有 transition: 0.2s，只需補上 hover) */
+    .camera-btn:hover { transform: translateY(-2px); filter: brightness(1.08); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+    
+    /* 3. 底部取消/產出報告按鈕 */
+    .submit-btn { transition: all 0.2s ease; }
+    .submit-btn:hover { transform: translateY(-2px); filter: brightness(1.08); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+    
+    /* 4. 日期輸入框 Hover 時邊框變色 */
+    input[type="date"] { transition: border-color 0.2s ease; }
+    input[type="date"]:hover { border-color: #3498db; }
     #loading { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.9); z-index:999; justify-content:center; align-items:center; font-size:24px; font-weight:bold; flex-direction:column; }
 
     /* 📱 手機專用排版微調 */
