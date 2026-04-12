@@ -145,18 +145,34 @@
     window.onload = loadList;
 
     function loadList() {
+      // 🌟 資安機制：從瀏覽器記憶體抓取密碼，如果沒有就跳出視窗詢問
+      let currentToken = localStorage.getItem("hp_clinic_token");
+      if (!currentToken) {
+        currentToken = prompt("🔒 系統已上鎖：\n請輸入歐葉診所專屬授權密碼以讀取名單：");
+        if (!currentToken) return; // 如果按取消或沒輸入，就不讀取
+        localStorage.setItem("hp_clinic_token", currentToken); // 記憶密碼
+      }
+
       document.getElementById('patient-list').innerHTML = "<h3 style='text-align:center; color: #7f8c8d; margin-top:40px;'>讀取中...</h3>";
       
       fetch(API_URL, {
         method: 'POST',
         redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: "getPendingList" })
+        // 🌟 傳送資料時，把 token 密碼一起打包送給後端檢查
+        body: JSON.stringify({ action: "getPendingList", token: currentToken })
       })
       .then(response => response.json())
       .then(res => {
-        if (res.status === 'success') renderList(res.data);
-        else document.getElementById('patient-list').innerHTML = `<h3 style='color:#e74c3c; text-align:center;'>❌ 讀取失敗：${res.message}</h3>`;
+        if (res.status === 'success') {
+          renderList(res.data);
+        } else {
+          // 如果後端說密碼錯誤，就把錯誤的記憶密碼清掉，讓人員下次可以重輸
+          if (res.message.includes("密碼錯誤")) {
+            localStorage.removeItem("hp_clinic_token");
+          }
+          document.getElementById('patient-list').innerHTML = `<h3 style='color:#e74c3c; text-align:center;'>❌ 讀取失敗：${res.message}</h3>`;
+        }
       })
       .catch(err => {
         document.getElementById('patient-list').innerHTML = `<h3 style='color:#e74c3c; text-align:center;'>❌ 網路連線錯誤</h3>`;
@@ -270,7 +286,7 @@
         method: 'POST',
         redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: "submitReport", payload: currentData })
+        body: JSON.stringify({ action: "submitReport", payload: currentData, token: localStorage.getItem("hp_clinic_token"), payload: currentData })
       })
       .then(response => response.json())
       .then(res => {
