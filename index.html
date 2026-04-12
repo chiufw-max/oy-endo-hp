@@ -286,7 +286,12 @@
         method: 'POST',
         redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: "submitReport", payload: currentData, token: localStorage.getItem("hp_clinic_token"), payload: currentData })
+        // 👇 修改後：偷偷把剛剛存在瀏覽器裡的密碼 (token) 一起打包送給後端
+        body: JSON.stringify({ 
+            action: "submitReport", 
+            token: localStorage.getItem("hp_clinic_token"), 
+            payload: currentData 
+        })
       })
       .then(response => response.json())
       .then(res => {
