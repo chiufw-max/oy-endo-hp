@@ -237,12 +237,8 @@
   <button class="fullscreen-btn" id="fsBtn" onclick="toggleFullScreen()">⛶</button>
 
   <script>
-    // 🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟
-    // 請將下方引號內的網址，換成您剛剛重新部署「主系統GAS」獲得的 /exec 網址
     const API_URL = "https://script.google.com/macros/s/AKfycbzPr9iaO6jESxJGhxiHddy2BKK0yvdxXIoxT4XCjNYlfu0O6nsX02-uUzy8apGf1f85Mw/exec"; 
-    // 🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟
 
-    // --- 打造我們自己的通訊器 (取代 google.script.run) ---
     async function callGAS(action, params = {}) {
       let currentToken = localStorage.getItem("dashboard_clinic_token");
       if (!currentToken) {
@@ -251,6 +247,7 @@
         localStorage.setItem("dashboard_clinic_token", currentToken);
       }
 
+      // 這裡會自動把 action, token(9911), 和其他參數打包送給後端
       const payload = { action: action, token: currentToken, ...params };
       try {
         const response = await fetch(API_URL, {
