@@ -470,20 +470,20 @@
 
       // 🎯 分流條件 2：嚴謹的後端檢查 (預防網頁重整後變數消失)
       document.getElementById('loadingOverlay').style.display = 'flex';
-      google.script.run
-        .withSuccessHandler(function(hasSignedToday) {
+      callGAS("checkIfSignedToday", { idNo: currentData.idNo })
+        .then(hasSignedToday => {
           document.getElementById('loadingOverlay').style.display = 'none';
           if (hasSignedToday) {
             executeSave([]); // 今天已經簽過了，跳過護理師，直接存檔
           } else {
-            toStep(4); // 今天第一份單，乖乖轉交護理師 (Step 4)
+            toStep(4); // 今天第一份單，轉交護理師 (Step 4)
           }
         })
-        .withFailureHandler(function(err) {
+        .catch(err => {
+          // 萬一網路異常，依然保守退回護理師畫面，避免卡死
           document.getElementById('loadingOverlay').style.display = 'none';
-          toStep(4); // 網路連線異常時的備案：保守退回護理師畫面
-        })
-        .checkIfSignedToday(currentData.idNo);
+          toStep(4); 
+        });
     }
 
     function executeSave(labTestsArray) {
