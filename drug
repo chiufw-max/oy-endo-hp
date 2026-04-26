@@ -1,0 +1,1455 @@
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+      .setTitle('歐葉豐原診所藥庫系統')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function getBasicData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. 刪除或註解掉原本抓取「廠商清單」的那行，因為該工作表已不存在
+  // const vendorData = ss.getSheetByName('廠商清單').getDataRange().getValues(); 
+  
+  const drugData = ss.getSheetByName('藥品清單').getDataRange().getValues();
+  
+  const drugs = drugData.slice(1).map(row => ({
+    code: row[2].toString(),
+    name: row[4],
+    vendor: row[6],
+    price: parseFloat(row[7]) || 0 
+  }));
+  
+  // === 修改重點 ===
+  // 直接掃描「藥品清單」裡所有的廠商欄位 (row[4])
+  // 使用 Set 自動去除重複的廠商名
+  const vendors = [...new Set(drugData.slice(1).map(row => row[6]))]
+                  .filter(v => v && v.toString().trim() !== ""); // 過濾掉空白
+  
+  // 依筆畫或字母排序，讓下拉選單好找一點
+  vendors.sort((a, b) => a.localeCompare(b));
+  
+  return { vendors: vendors, drugs: drugs, nextSerial: generateNextSerial(ss) };
+}
+
+function generateNextSerial(ss) {
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  const lastRow = masterSheet.getLastRow();
+  const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd');
+  
+  let newSeq = 1;
+  
+  if (lastRow > 1) {
+    const lastSerial = masterSheet.getRange(lastRow, 1).getValue().toString();
+    if (lastSerial.startsWith(todayStr)) {
+      const parts = lastSerial.split('-');
+      if (parts.length > 1) {
+        newSeq = parseInt(parts[1]) + 1;
+      }
+    }
+  }
+  return todayStr + "-" + newSeq.toString().padStart(3, '0');
+}
+
+// V6.1: 依日期取得單號
+function getSerialByDate(dateStr) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  
+  if (!dateStr) dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const cleanDateStr = dateStr.replace(/-/g, '');
+  const prefix = cleanDateStr + "-";
+  
+  let maxSeq = 0;
+  const lastRow = masterSheet.getLastRow();
+
+  if (lastRow > 1) {
+    const data = masterSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const serial = data[i][0].toString();
+      if (serial.startsWith(prefix)) {
+        const parts = serial.split('-');
+        if (parts.length > 1) {
+          const seq = parseInt(parts[1], 10);
+          if (seq > maxSeq) maxSeq = seq;
+        }
+      }
+    }
+  }
+  
+  const nextSeq = maxSeq + 1;
+  return prefix + nextSeq.toString().padStart(3, '0');
+}
+
+function saveInboundForm(formObj) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  const detailSheet = ss.getSheetByName('入庫單_明細');
+  
+  const finalSerial = formObj.manualSerial;
+  const entryDate = new Date(formObj.date);
+  
+  // === 修改開始：支援自訂日期 ===
+  let payDate;
+  // 如果使用者選了自訂，且有傳入日期，就直接用該日期
+  if (formObj.paymentTerm === 'custom' && formObj.customPayDate) {
+    payDate = new Date(formObj.customPayDate);
+  } else {
+    // 原本的邏輯：自動推算
+    payDate = new Date(entryDate);
+    if (formObj.paymentTerm === '1month') {
+      payDate.setMonth(payDate.getMonth() + 1);
+    } else if (formObj.paymentTerm === '3months') {
+      payDate.setMonth(payDate.getMonth() + 3);
+    }
+    // 預設 fallback (如果都沒選到，就預設 +1)
+    else {
+      payDate.setMonth(payDate.getMonth() + 1);
+    }
+  }
+  // === 修改結束 ===
+  const payDateStr = Utilities.formatDate(payDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');
+
+  masterSheet.appendRow([
+    finalSerial, formObj.date, formObj.mainVendor,
+    formObj.totalAmount, formObj.discountAmount, payDateStr, "正常"
+  ]);
+
+  const details = JSON.parse(formObj.itemsJson);
+  const detailRows = details.map(item => [
+    finalSerial, item.code, item.name, item.qty, item.price, item.subtotal,
+    "未銷帳", "", ""
+  ]);
+  
+  if (detailRows.length > 0) {
+    detailSheet.getRange(detailSheet.getLastRow() + 1, 1, detailRows.length, 9).setValues(detailRows);
+  }
+
+  const nextSerialForSameDate = getSerialByDate(formObj.date);
+
+  return { 
+    success: true, 
+    msg: "單號 " + finalSerial + " 入庫成功", 
+    nextSerial: nextSerialForSameDate 
+  };
+}
+
+function searchInboundDetails(criteria) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  const detailSheet = ss.getSheetByName('入庫單_明細');
+  
+  const mData = masterSheet.getDataRange().getValues();
+  const dData = detailSheet.getDataRange().getValues();
+  
+  const masterMap = {};
+  for (let i = 1; i < mData.length; i++) {
+    const row = mData[i];
+    masterMap[row[0]] = {
+      date: new Date(row[1]),
+      vendor: row[2],
+      discTotal: row[4],
+      payDate: new Date(row[5]),
+      mStatus: row[6]
+    };
+  }
+
+  const serialItemCount = {};
+  for (let i = 1; i < dData.length; i++) {
+    const s = dData[i][0];
+    serialItemCount[s] = (serialItemCount[s] || 0) + 1;
+  }
+
+  const result = [];
+  
+  for (let i = 1; i < dData.length; i++) {
+    const row = dData[i];
+    const serial = row[0];
+    const mInfo = masterMap[serial];
+    
+    if (!mInfo) continue;
+
+    const rowStatus = row[6] || "未銷帳";
+    const payMethod = row[7] || "";
+    const payNote = row[8] || "";
+    
+    if (criteria.status === 'unpaid' && (rowStatus.includes('已') || rowStatus === '作廢')) continue;
+    if (criteria.status === 'paid' && !rowStatus.includes('已')) continue;
+    if (criteria.status === 'void' && rowStatus !== '作廢') continue;
+
+    // === 判斷入庫區間 ===
+    const inboundStr = Utilities.formatDate(mInfo.date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    if (criteria.inboundStart && inboundStr < criteria.inboundStart) continue;
+    if (criteria.inboundEnd && inboundStr > criteria.inboundEnd) continue;
+    
+    // === 判斷廠商 (若留空白則跳過判斷，搜尋全部) ===
+    if (criteria.vendor && mInfo.vendor !== criteria.vendor) continue;
+    
+    // === 判斷預計銷帳區間 ===
+    const payStr = Utilities.formatDate(mInfo.payDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    if (criteria.payStart && payStr < criteria.payStart) continue;
+    if (criteria.payEnd && payStr > criteria.payEnd) continue;
+    
+    result.push({
+      rowIndex: i + 1,
+      serial: serial,
+      inboundDate: Utilities.formatDate(mInfo.date, Session.getScriptTimeZone(), 'yyyy/MM/dd'),
+      payDate: Utilities.formatDate(mInfo.payDate, Session.getScriptTimeZone(), 'yyyy/MM/dd'),
+      vendor: mInfo.vendor,
+      code: row[1],
+      drugName: row[2],
+      qty: row[3],
+      price: row[4],
+      subtotal: row[5],
+      status: rowStatus,
+      payMethod: payMethod,
+      payNote: payNote,
+      masterDiscTotal: mInfo.discTotal,
+      totalItemsInOrder: serialItemCount[serial]
+    });
+  }
+  
+  result.sort((a, b) => a.serial.localeCompare(b.serial));
+  
+  return result;
+}
+
+function updatePaymentStatus(rowIndices, type, dateStr) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const detailSheet = ss.getSheetByName('入庫單_明細');
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  
+  const serialsToRevert = new Set();
+
+  rowIndices.forEach(idx => {
+    const serial = detailSheet.getRange(idx, 1).getValue(); 
+    const range = detailSheet.getRange(idx, 7, 1, 3);
+    
+    if (type === 'transfer') {
+      range.setValues([["已轉帳", "轉帳", "轉帳日:" + dateStr]]);
+    } else if (type === 'cash_prep') {
+      range.setValues([["備款完成", "現金", "備款日:" + dateStr]]);
+    } else if (type === 'cash_done') {
+      range.setValues([["已取款", "現金", "取款日:" + dateStr]]);
+    } else if (type === 'revert') {
+      range.setValues([["未銷帳", "", ""]]);
+      serialsToRevert.add(serial);
+    }
+  });
+
+  if (type === 'revert' && serialsToRevert.size > 0) {
+    const mData = masterSheet.getDataRange().getValues();
+    serialsToRevert.forEach(targetSerial => {
+      for (let i = 1; i < mData.length; i++) {
+        if (mData[i][0].toString() === targetSerial.toString() && mData[i][6] === '作廢') {
+          masterSheet.getRange(i + 1, 7).setValue("正常");
+        }
+      }
+    });
+  }
+  
+  return "狀態更新成功！";
+}
+
+function voidInboundOrder(serial) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  const detailSheet = ss.getSheetByName('入庫單_明細');
+  
+  const mData = masterSheet.getDataRange().getValues();
+  for (let i = 1; i < mData.length; i++) {
+    if (mData[i][0].toString() === serial.toString()) {
+      masterSheet.getRange(i + 1, 7).setValue("作廢");
+      break;
+    }
+  }
+
+  const dData = detailSheet.getDataRange().getValues();
+  for (let i = 1; i < dData.length; i++) {
+    if (dData[i][0].toString() === serial.toString()) {
+      detailSheet.getRange(i + 1, 7).setValue("作廢");
+    }
+  }
+  
+  return "單號 " + serial + " 已作廢。";
+}
+
+function adminDeleteDataByDate(password, targetDateStr) {
+  if (password !== '8888') {
+    return "密碼錯誤，拒絕存取。";
+  }
+  
+  if (!targetDateStr || targetDateStr.length !== 8) {
+    return "日期格式錯誤";
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  const detailSheet = ss.getSheetByName('入庫單_明細');
+  
+  const searchPrefix = targetDateStr + "-";
+  let deletedCount = 0;
+
+  const lastDetailRow = detailSheet.getLastRow();
+  if (lastDetailRow > 1) {
+    const detailData = detailSheet.getRange(2, 1, lastDetailRow - 1, 1).getValues();
+    for (let i = detailData.length - 1; i >= 0; i--) {
+      const serial = detailData[i][0].toString();
+      if (serial.startsWith(searchPrefix)) {
+        detailSheet.deleteRow(i + 2);
+      }
+    }
+  }
+
+  const lastMasterRow = masterSheet.getLastRow();
+  if (lastMasterRow > 1) {
+    const masterData = masterSheet.getRange(2, 1, lastMasterRow - 1, 1).getValues();
+    for (let i = masterData.length - 1; i >= 0; i--) {
+      const serial = masterData[i][0].toString();
+      if (serial.startsWith(searchPrefix)) {
+        masterSheet.deleteRow(i + 2);
+        deletedCount++;
+      }
+    }
+  }
+
+  const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd');
+  let nextSerial = null;
+  if (targetDateStr === todayStr) {
+     nextSerial = generateNextSerial(ss);
+  }
+
+  return {
+    msg: `已刪除日期 [${targetDateStr}] 的資料，共 ${deletedCount} 筆主單。`,
+    nextSerial: nextSerial 
+  };
+}
+
+// 新增功能：修改入庫單的「折後總額」
+// ==========================================
+function updateOrderDiscount(serial, newAmount) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  const data = masterSheet.getDataRange().getValues();
+
+  // 遍歷主檔尋找單號
+  // 資料結構參照 saveInboundForm: 
+  // [0]單號, [1]日期, [2]廠商, [3]總額, [4]折後金額, [5]付款日, [6]狀態
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0].toString() === serial.toString()) {
+      // 找到該列 (Row index 從 1 開始，所以是 i+1)
+      // 修改第 5 欄 (Column E) = 折後金額
+      masterSheet.getRange(i + 1, 5).setValue(newAmount);
+      return "單號 " + serial + " 的折後金額已更新為：" + newAmount;
+    }
+  }
+  return "找不到單號 " + serial;
+}
+
+// 8. 統計報表功能 (V7.0 更新：支援明細紀錄與數量排序)
+function getStatisticsReport(criteria) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  const detailSheet = ss.getSheetByName('入庫單_明細');
+  
+  const mData = masterSheet.getDataRange().getValues();
+  const dData = detailSheet.getDataRange().getValues();
+  
+  const masterMap = {};
+  for (let i = 1; i < mData.length; i++) {
+    const row = mData[i];
+    if (row[6] === '作廢') continue;
+    
+    const dStr = Utilities.formatDate(new Date(row[1]), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    masterMap[row[0]] = {
+      dateStr: dStr,
+      vendor: row[2]
+    };
+  }
+
+  const stats = {};
+
+  for (let i = 1; i < dData.length; i++) {
+    const row = dData[i];
+    const serial = row[0];
+    const mInfo = masterMap[serial];
+    
+    if (!mInfo) continue;
+    if (row[6] === '作廢') continue;
+
+    if (criteria.startDate && mInfo.dateStr < criteria.startDate) continue;
+    if (criteria.endDate && mInfo.dateStr > criteria.endDate) continue;
+    if (criteria.vendor && mInfo.vendor !== criteria.vendor) continue;
+    const code = row[1].toString(); // 確保代碼是字串
+
+    // === 新增邏輯：如果是耗材群組模式，只允許 ZZ 開頭的代碼 ===
+    if (criteria.isConsumablesGroup) {
+      if (!code.toUpperCase().startsWith('ZZ')) continue;
+    } 
+    // === 原有邏輯：如果有指定單一藥品 (且未勾選耗材群組)，則篩選單一藥品 ===
+    else if (criteria.drugCode && code !== criteria.drugCode.toString()) {
+      continue;
+    }
+
+    const qty = parseFloat(row[3]) || 0;
+    const subtotal = parseFloat(row[5]) || 0;
+    const price = parseFloat(row[4]) || 0;
+
+    if (!stats[code]) {
+      stats[code] = {
+        code: code,
+        name: row[2],
+        vendor: mInfo.vendor,
+        qty: 0,
+        subtotal: 0,
+        details: [] // V7.0 新增：詳細記錄
+      };
+    }
+    
+    stats[code].qty += qty;
+    stats[code].subtotal += subtotal;
+    
+    // 加入明細 (用於前端展開)
+    stats[code].details.push({
+      date: mInfo.dateStr,
+      serial: serial,
+      qty: qty,
+      price: price,
+      subtotal: subtotal
+    });
+  }
+
+  const result = Object.values(stats).map(item => ({
+    code: item.code,
+    name: item.name,
+    vendor: item.vendor,
+    qty: item.qty,
+    subtotal: item.subtotal,
+    avgPrice: (item.qty > 0) ? Math.round(item.subtotal / item.qty) : 0,
+    details: item.details
+  }));
+
+  // V7.0 需求 7: 依總數量由多到少排列
+  // 判斷：如果是「耗材群組」模式，依廠商名稱排序 (筆畫多 -> 少)
+  if (criteria.isConsumablesGroup) {
+    result.sort((a, b) => {
+      // localeCompare: 比較字串
+      // b 對 a (b.localeCompare(a)) = 降冪 (筆畫多到少)
+      // a 對 b (a.localeCompare(b)) = 升冪 (筆畫少到多)
+      return b.vendor.localeCompare(a.vendor, 'zh-TW');
+    });
+  } else {
+    // 預設模式 (一般藥品統計)：依「總數量」由多到少排列
+    result.sort((a, b) => b.qty - a.qty);
+  }
+
+  return result;
+}
+
+// === 新增：檢查本日是否重複入庫 ===
+function checkDuplicateInbound(dateStr, codes) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterSheet = ss.getSheetByName('入庫單_主檔');
+  const detailSheet = ss.getSheetByName('入庫單_明細');
+
+  const mData = masterSheet.getDataRange().getValues();
+  const dData = detailSheet.getDataRange().getValues();
+
+  // 1. 找出同一天的所有單號
+  const targetSerials = new Set();
+  for (let i = 1; i < mData.length; i++) {
+    if (mData[i][6] === '作廢') continue; // 略過已作廢
+    const rowDate = Utilities.formatDate(new Date(mData[i][1]), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    if (rowDate === dateStr) {
+      targetSerials.add(mData[i][0].toString());
+    }
+  }
+
+  // 2. 檢查明細中是否有相同的藥品代碼
+  const duplicates = new Set();
+  for (let i = 1; i < dData.length; i++) {
+    const serial = dData[i][0].toString();
+    if (targetSerials.has(serial) && dData[i][6] !== '作廢') {
+      const code = dData[i][1].toString();
+      if (codes.includes(code)) {
+        duplicates.add(dData[i][2]); // 記錄重複的藥名
+      }
+    }
+  }
+  return Array.from(duplicates);
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #00897b;
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --text: #333;
+      --danger: #e53935;
+      --warning: #fb8c00;
+      --info: #0288d1;
+      --success: #2e7d32;
+      --purple: #7b1fa2;
+      --link: #5e35b1;
+    }
+
+    body { 
+      font-family: 'Noto Sans TC', sans-serif; 
+      padding: 20px; 
+      background: var(--bg); 
+      color: var(--text); 
+      font-size: 18px; 
+      /* 修改 1: 因為藥名變長，將最小寬度拉大，避免換行 */
+      min-width: 1450px; 
+    }
+
+    .section { background: var(--card); padding: 25px; margin-bottom: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    h2 { margin-top: 0; color: var(--primary); border-bottom: 3px solid var(--primary); padding-bottom: 10px; font-size: 1.8rem; }
+    
+    .row { display: flex; gap: 15px; margin-bottom: 15px; align-items: center; flex-wrap: wrap; }
+    .control-group { display: flex; flex-direction: column; }
+    .vendor-input-group { flex: 0 0 350px; max-width: 350px; } 
+    
+    label { font-size: 1.1rem; font-weight: bold; color: #666; margin-bottom: 5px; }
+    
+    input, select { 
+        padding: 12px; 
+        border: 1px solid #ccc; 
+        border-radius: 8px; 
+        font-size: 1.25rem; 
+        outline: none; 
+        width: 100%; 
+        box-sizing: border-box;
+    }
+    input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 137, 123, 0.2); }
+    
+    button { padding: 12px 30px; cursor: pointer; background: var(--primary); color: white; border: none; border-radius: 50px; font-size: 1.2rem; transition: 0.2s; box-shadow: 0 3px 5px rgba(0,0,0,0.1); white-space: nowrap;}
+    button:hover { transform: translateY(-2px); box-shadow: 0 5px 10px rgba(0,0,0,0.15); opacity: 0.9; }
+    
+    .btn-red { background: var(--danger); }
+    .btn-orange { background: var(--warning); }
+    .btn-info { background: var(--info); }
+    .btn-success { background: var(--success); }
+    .btn-purple { background: var(--purple); }
+    .btn-link { background: var(--link); }
+    .btn-small { padding: 8px 18px; font-size: 1.1rem; border-radius: 8px; }
+
+    /* === 核心修改：Inline-Block 強制佈局 === */
+    
+    .ib-container {
+        font-size: 0;           /* 消除間隙 */
+        white-space: nowrap;    /* 強制不換行 */
+        margin-bottom: 15px;
+        display: block;
+    }
+
+    .ib-item {
+        display: inline-block !important;
+        vertical-align: middle !important;
+        font-size: 1.25rem !important; 
+        box-sizing: border-box !important;
+        padding-right: 15px; /* 預設間距 */
+    }
+
+    /* === 修改 2: 調整各欄位寬度 === */
+    .w-code  { width: 160px !important; }
+    
+    /* 藥名欄位容器寬度：從 350px 改為 580px (保留空間給 Gap) */
+    .w-drug  { 
+        width: 580px !important; 
+        padding-right: 30px !important; /* 藥名與數量之間的間隔加大 */
+    }
+    
+    .w-qty   { width: 110px !important; }
+    .w-price { width: 110px !important; }
+    .w-sub   { width: 130px !important; }
+    .w-btn   { width: 150px !important; padding-right: 0; text-align: center;} 
+
+    /* 藥名內容寬度：從 350px 改為 550px */
+    .drug-wrap {
+        width: 550px !important;
+        display: inline-block;
+        vertical-align: middle;
+    }
+    
+    .drug-select {
+        width: 100% !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    
+    /* 入庫作業標題列 */
+    .inbound-header {
+        background: #eee;
+        padding: 15px 10px;
+        font-weight: bold;
+        color: #555;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        font-size: 0; 
+        white-space: nowrap;
+    }
+    .inbound-header div {
+        display: inline-block;
+        font-size: 1.25rem;
+        vertical-align: middle;
+        padding-right: 15px;
+    }
+    /* 標題也要同步加大間距 */
+    .inbound-header .w-drug {
+        padding-right: 30px !important;
+    }
+
+    /* 其他樣式 */
+    table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 15px; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px #eee; }
+    th { background: var(--primary); color: white; padding: 15px; text-align: left; font-size: 1.3rem; }
+    td { padding: 15px; border-bottom: 1px solid #eee; background: #fff; font-size: 1.25rem; vertical-align: middle; }
+    
+    .serial-text { font-size: 1.4rem; font-weight: bold; color: #333; }
+    .vendor-text { font-size: 1.4rem; color: var(--primary); }
+    
+    input[type="checkbox"] { transform: scale(1.8); cursor: pointer; margin-right: 5px; width: auto;}
+    tbody.group-odd td { background: #fff; }
+    tbody.group-even td { background: #e0f2f1; } 
+    
+    .detail-row { display: none; background-color: #f3e5f5; }
+    .detail-table { width: 90%; margin: 10px auto; border: 1px solid #ddd; border-radius: 8px; font-size: 1.1rem; }
+    .detail-table th { background: #9c27b0; font-size: 1.1rem; padding: 10px; }
+    .detail-table td { background: #fff; font-size: 1.1rem; padding: 10px; border-bottom: 1px solid #eee; }
+    
+    .expand-btn { cursor: pointer; user-select: none; font-size: 1.2rem; }
+    .expand-multiple { color: #d32f2f; font-weight: bold; }
+    .expand-single { color: #9e9e9e; }
+
+    .status-tag { padding: 8px 15px; border-radius: 15px; font-size: 1rem; font-weight: bold; }
+    .st-unpaid { color: #d32f2f; background: #ffebee; }
+    .st-prep { color: #f57c00; background: #fff3e0; }
+    .st-done { color: #388e3c; background: #e8f5e9; }
+    .st-void { color: #9e9e9e; text-decoration: line-through; } 
+
+    .tabs { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab-btn { background: #cfd8dc; color: #546e7a; border-radius: 20px; padding: 15px 40px; border:none; cursor:pointer; font-size: 1.25rem; }
+    .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(0,137,123,0.3); }
+
+    .payment-console { background: #e3f2fd; padding: 25px; border-radius: 12px; border: 1px solid #bbdefb; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    
+    .admin-btn {
+      position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px;
+      background: #455a64; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 9999; transition: transform 0.3s;
+    }
+    .admin-btn:hover { transform: rotate(90deg) scale(1.1); background: #263238; }
+  </style>
+</head>
+<body>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('inbound', this)">入庫作業</button>
+    <button class="tab-btn" onclick="switchTab('query', this)">查詢與銷帳</button>
+    <button class="tab-btn" onclick="switchTab('stats', this)">📊 統計報表</button>
+    <button class="tab-btn btn-link" onclick="window.open('https://script.google.com/macros/s/AKfycbxHVNjSKE7MvOeuwOB-QKay_h3qb_mh1ESkrJqqSnIidA6TpYIahzwVTKVivbYZ_O9E/exec', '_blank')" style="color:white; margin-left:auto;">💊 診所藥品分析</button>
+  </div>
+
+  <div id="inboundSection" class="section">
+    <h2>入庫作業</h2>
+    <div class="row" style="background:#e8f0fe; padding:25px; border-radius:12px;">
+      <div class="control-group"><label>日期</label><input type="date" id="entryDate" onchange="updateSerial()"></div>
+      <div class="control-group"><label>單號</label><input type="text" id="manualSerial" style="width:180px; font-weight:bold; color:var(--primary);"></div>
+      
+      <div class="control-group vendor-input-group">
+        <label>廠商 (模糊搜尋)</label>
+        <input type="text" id="mainVendorInput" list="vendorList" placeholder="選廠商..." onchange="onMainVendorChange()">
+        <datalist id="vendorList"></datalist>
+      </div>
+      
+      <div class="control-group">
+        <label>條件</label>
+        <select id="paymentTerm" onchange="toggleCustomDate()">
+          <option value="1month">月結 +1</option>
+          <option value="3months">月結 +3</option>
+          <option value="custom" style="color:blue; font-weight:bold;">自訂付款日</option>
+        </select>
+        <input type="date" id="customPayDate" style="display:none; margin-top:5px; border:2px solid var(--info); color:var(--info); font-weight:bold;" title="請選擇預計付款日">
+      </div>
+    </div>
+    
+    <div class="inbound-header">
+      <div class="w-code">代碼</div>
+      <div class="w-drug">藥名</div>
+      <div class="w-qty">數量</div>
+      <div class="w-price">單價</div>
+      <div class="w-sub">小計</div>
+      <div class="w-btn" style="text-align:center;">操作</div>
+    </div>
+    
+    <div id="itemsContainer"></div>
+    
+    <div class="row" style="margin-top:25px;">
+        <button onclick="addItemRow()" style="font-size:1.2rem;">+ 增加欄位</button>
+        <div style="flex-grow:1;"></div>
+        <button class="btn-orange" onclick="resetForm(true)">全表清空</button>
+    </div>
+    
+    <div class="row" style="justify-content:flex-end; border-top:2px dashed #ccc; padding-top:25px; margin-top:25px;">
+      <h3 style="margin-right:25px; font-size:1.5rem;">試算: <span id="calcTotal">0</span></h3>
+      <div class="control-group"><label style="color:red;">折後總額</label><input type="number" id="discountAmount" style="border:2px solid red; color:red; font-weight:bold; font-size:1.4rem; width: 180px;"></div>
+      <button onclick="submitInbound()" style="margin-left:25px; padding:12px 50px; font-size:1.3rem;">確認入庫</button>
+    </div>
+  </div>
+
+  <div id="querySection" class="section" style="display:none;">
+    <h2>查詢與銷帳</h2>
+    
+    <div class="row" style="background:#fff3e0; padding:25px; border-radius:12px;">
+      <div class="control-group"><label>顯示狀態</label>
+        <select id="qStatus">
+          <option value="unpaid">未結案 (未銷/備款)</option>
+          <option value="paid">已結案 (轉帳/取款)</option>
+          <option value="void">已作廢</option>
+          <option value="all">全部</option>
+        </select>
+      </div>
+      <div class="control-group vendor-input-group"><label>廠商</label><input type="text" id="qVendor" list="vendorList" placeholder="廠商..."></div>
+      
+      <div class="control-group">
+        <label>入庫區間</label>
+        <div style="display:flex; gap:5px; align-items:center;">
+          <input type="date" id="qInboundStart" style="width:200px;">
+          <span style="font-weight:bold; color:#666; font-size:1.5rem;">~</span>
+          <input type="date" id="qInboundEnd" style="width:200px;">
+        </div>
+      </div>
+      
+      <div class="control-group">
+        <label>預計銷帳區間</label>
+        <div style="display:flex; gap:5px; align-items:center;">
+          <input type="date" id="qPayStart" style="width:200px;">
+          <span style="font-weight:bold; color:#666; font-size:1.5rem;">~</span>
+          <input type="date" id="qPayEnd" style="width:200px;">
+        </div>
+      </div>
+      
+      <button onclick="runQuery()" style="margin-top:28px; padding:12px 20px;">🔍 查詢</button>
+      <button onclick="exportToExcel()" class="btn-success" style="margin-top:28px; margin-left:5px; padding:12px 20px;" title="匯出 Excel">📥</button>
+    </div>
+
+    <div id="queryResults"></div>
+
+    <div class="payment-console" style="margin-top:25px;">
+      <div style="font-weight:bold; color:#1565c0; font-size:1.3rem;">💰 銷帳/操作控制台</div>
+      <div class="control-group"><label>操作日期</label><input type="date" id="actionDate"></div>
+      <div class="control-group"><label>執行動作</label>
+        <select id="actionType" style="border:2px solid #1565c0; color:#0d47a1; font-weight:bold;">
+          <option value="transfer">🏦 轉帳 (直接結案)</option>
+          <option value="cash_prep">✉️ 現金-已備款 (放入櫃台)</option>
+          <option value="cash_done">🤝 現金-已取款 (廠商拿走)</option>
+          <option value="revert" style="color:red;">↩️ 救回 (取消作廢/還原未銷)</option>
+        </select>
+      </div>
+      <div style="flex-grow:1; text-align:right;">
+        <div style="font-size:1.2rem;">選取金額: <span id="selectedTotal" style="color:blue; font-size:1.8rem; font-weight:bold;">0</span></div>
+      </div>
+      <button onclick="executePayment()" class="btn-info" style="padding:15px 50px; font-size:1.2rem;">確認執行</button>
+    </div>
+  </div>
+
+  <div id="statsSection" class="section" style="display:none;">
+    <h2 style="color:var(--purple); border-color:var(--purple);">統計報表</h2>
+    
+    <div class="row" style="background:#f3e5f5; padding:25px; border-radius:12px;">
+      <div class="control-group"><label>開始日期</label><input type="date" id="statStartDate"></div>
+      <div class="control-group"><label>結束日期</label><input type="date" id="statEndDate"></div>
+      
+      <div class="control-group vendor-input-group"><label>指定廠商</label>
+        <input type="text" id="statVendor" list="vendorList" placeholder="廠商..." onchange="updateStatDrugList()">
+      </div>
+      
+      <div class="control-group" style="flex: 0 0 250px; max-width: 250px;">
+        <label>指定藥品</label>
+        <input type="text" id="statDrug" list="statDrugDatalist" placeholder="選填..." onchange="onStatDrugChange()">
+        <datalist id="statDrugDatalist"></datalist>
+      </div>
+
+      <div class="control-group" style="justify-content:center;">
+        <label style="cursor:pointer; color:#d81b60; font-weight:bold; margin-top:25px;">
+           <input type="checkbox" id="statGroupZZ" onchange="toggleStatInputs()"> 
+           📦 統計耗材群組 (ZZ系列)
+        </label>
+      </div>
+
+      <button onclick="runStats()" class="btn-purple" style="margin-top:28px;">📊 開始統計</button>
+      <button onclick="exportStatsToExcel()" class="btn-success" style="margin-top:28px;">📥 匯出 Excel</button>
+      <button onclick="clearStatsForm()" class="btn-orange" style="margin-top:28px;">清空條件</button>
+    </div>
+
+    <div id="statsResults">
+       <p style="text-align:center; color:#888; padding:25px;">請選擇條件並點擊「開始統計」</p>
+    </div>
+  </div>
+
+  <div class="admin-btn" onclick="runAdminTask()" title="管理員功能：抹除資料">⚙️</div>
+  <datalist id="drugCodeList"></datalist>
+
+  <script>
+    let globalDrugs = [];
+    let globalVendors = [];
+    let currentQueryData = [];
+    let currentStatsData = [];
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === "Escape") {
+        const activeElement = document.activeElement;
+        if (activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "SELECT")) {
+          activeElement.value = "";
+          if (activeElement.id === 'mainVendorInput') onMainVendorChange();
+          if (activeElement.id === 'statVendor') updateStatDrugList();
+        }
+      }
+    });
+
+    window.onload = function() {
+      const today = new Date();
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1); 
+      
+      document.getElementById('entryDate').valueAsDate = today;
+      document.getElementById('actionDate').valueAsDate = today; 
+      
+      document.getElementById('statStartDate').valueAsDate = firstDay;
+      document.getElementById('statEndDate').valueAsDate = today;
+
+      google.script.run.withSuccessHandler(initData).getBasicData();
+    };
+    
+    function toggleCustomDate() {
+      const term = document.getElementById('paymentTerm').value;
+      const customInput = document.getElementById('customPayDate');
+      
+      if (term === 'custom') {
+        customInput.style.display = 'block';
+        if(!customInput.value) {
+           customInput.value = document.getElementById('entryDate').value;
+        }
+      } else {
+        customInput.style.display = 'none';
+        customInput.value = '';
+      }
+    }
+
+    function initData(data) {
+      globalDrugs = data.drugs;
+      globalVendors = data.vendors;
+      document.getElementById('manualSerial').value = data.nextSerial;
+      const vList = document.getElementById('vendorList');
+      vList.innerHTML = '';
+      globalVendors.forEach(v => {
+        let opt = document.createElement('option'); opt.value = v; vList.appendChild(opt);
+      });
+      addItemRow();
+      updateStatDrugList(); // === 新增這行：網頁載入時，先載入所有藥品清單 ===
+    }
+
+    function updateSerial() {
+      const dateStr = document.getElementById('entryDate').value;
+      if (!dateStr) return;
+      const serialInput = document.getElementById('manualSerial');
+      serialInput.value = "更新中...";
+      serialInput.style.color = "#999";
+      google.script.run.withSuccessHandler(function(newSerial) {
+        serialInput.value = newSerial;
+        serialInput.style.color = "var(--primary)";
+      }).getSerialByDate(dateStr);
+    }
+
+    function switchTab(tabName, btnElement) {
+      const sections = ['inboundSection', 'querySection', 'statsSection'];
+      sections.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.style.display = 'none';
+      });
+      const target = document.getElementById(tabName + 'Section');
+      if(target) target.style.display = 'block';
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      if(btnElement && !btnElement.classList.contains('btn-link')) btnElement.classList.add('active');
+    }
+
+    // --- 統計相關 ---
+    function updateStatDrugList() {
+      const v = document.getElementById('statVendor').value;
+      const dl = document.getElementById('statDrugDatalist'); dl.innerHTML = '';
+      let list = v ? globalDrugs.filter(d => d.vendor === v) : globalDrugs;
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      list.forEach(d => { let opt=document.createElement('option'); opt.value=d.code; opt.label=d.name; dl.appendChild(opt); });
+    }
+
+    // === 新增：選定藥品後，自動帶入廠商 ===
+    function onStatDrugChange() {
+      const code = document.getElementById('statDrug').value;
+      if (code) {
+        const drug = globalDrugs.find(d => d.code === code);
+        if (drug) {
+           // 自動把廠商填入
+           document.getElementById('statVendor').value = drug.vendor;
+           // 更新藥品清單（縮小範圍為該廠商）
+           updateStatDrugList();
+        }
+      }
+    }
+
+    function clearStatsForm() {
+      const today = new Date();
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1); 
+      document.getElementById('statStartDate').valueAsDate = firstDay;
+      document.getElementById('statEndDate').valueAsDate = today;
+      document.getElementById('statVendor').value = '';
+      document.getElementById('statDrug').value = '';
+      document.getElementById('statsResults').innerHTML = '<p style="text-align:center; color:#888; padding:25px;">條件已清空</p>';
+    }
+
+    function runStats() {
+      const criteria = {
+        startDate: document.getElementById('statStartDate').value,
+        endDate: document.getElementById('statEndDate').value,
+        vendor: document.getElementById('statVendor').value,
+        drugCode: document.getElementById('statDrug').value
+      };
+      if(!criteria.startDate || !criteria.endDate) { alert("請選擇完整的日期區間"); return; }
+      document.getElementById('statsResults').innerHTML = '<p align="center">統計運算中...</p>';
+      google.script.run.withSuccessHandler(renderStatsTable).getStatisticsReport(criteria);
+    }
+
+    function renderStatsTable(data) {
+      currentStatsData = data;
+      const div = document.getElementById('statsResults'); div.innerHTML = '';
+      if(data.length === 0) { div.innerHTML = '<p align="center" style="padding:25px;">無符合資料</p>'; return; }
+
+      let grandTotalQty = 0; let grandTotalAmt = 0;
+      let html = `<table style="border: 2px solid #7b1fa2;">
+        <thead><tr style="background:#ba68c8; color:white;">
+          <th width="50"></th><th>廠商</th><th>藥品名稱</th><th>院內碼</th><th>總數量</th><th>平均單價</th><th>總金額</th>
+        </tr></thead><tbody>`;
+      
+      data.forEach((row, idx) => {
+        const bg = idx % 2 === 0 ? '#fff' : '#f3e5f5';
+        grandTotalQty += row.qty; grandTotalAmt += row.subtotal;
+        
+        const count = row.details.length;
+        const expandClass = count > 1 ? 'expand-multiple' : 'expand-single';
+        const expandText = count > 1 ? `+ (${count})` : `+ (1)`;
+        
+        html += `<tr style="background:${bg};">
+          <td onclick="toggleDetail('${row.code}')" class="expand-btn ${expandClass}" title="展開明細">${expandText}</td>
+          <td style="color:#7b1fa2; font-weight:bold;">${row.vendor}</td>
+          <td>${row.name}</td>
+          <td>${row.code}</td>
+          <td style="font-weight:bold;">${row.qty}</td>
+          <td>${row.avgPrice}</td>
+          <td style="color:#d81b60; font-weight:bold;">${row.subtotal.toLocaleString()}</td>
+        </tr>`;
+        
+        let detailHtml = `<table class="detail-table"><thead><tr><th>入庫日期</th><th>單號</th><th>數量</th><th>單價</th><th>小計</th></tr></thead><tbody>`;
+        row.details.forEach(d => {
+          detailHtml += `<tr><td>${d.date}</td><td>${d.serial}</td><td>${d.qty}</td><td>${d.price}</td><td>${d.subtotal.toLocaleString()}</td></tr>`;
+        });
+        detailHtml += `</tbody></table>`;
+
+        html += `<tr id="detail-${row.code}" class="detail-row"><td colspan="7" style="padding:15px;">${detailHtml}</td></tr>`;
+      });
+      
+      html += `<tr style="background:#4a148c; color:white; font-weight:bold; font-size:1.4rem;"><td colspan="4" style="text-align:right;">總計：</td><td>${grandTotalQty}</td><td>-</td><td>${grandTotalAmt.toLocaleString()}</td></tr></tbody></table>`;
+      div.innerHTML = html;
+    }
+
+    function toggleDetail(code) {
+      const row = document.getElementById('detail-' + code);
+      if(row.style.display === 'table-row') {
+        row.style.display = 'none';
+      } else {
+        row.style.display = 'table-row';
+      }
+    }
+
+    function exportStatsToExcel() {
+      if(!currentStatsData || currentStatsData.length === 0) { alert("無報表資料可匯出"); return; }
+      const exportData = currentStatsData.map(row => ({ "廠商": row.vendor, "藥品名稱": row.name, "院內碼": row.code, "總進貨數量": row.qty, "平均單價": row.avgPrice, "總進貨金額": row.subtotal }));
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "統計報表");
+      const start = document.getElementById('statStartDate').value;
+      const end = document.getElementById('statEndDate').value;
+      XLSX.writeFile(workbook, `藥庫統計報表_${start}_${end}.xlsx`);
+    }
+
+    // --- (原有功能) ---
+    function exportToExcel() {
+      if (!currentQueryData || currentQueryData.length === 0) { alert("無查詢結果"); return; }
+      const exportData = currentQueryData.map(row => ({ "單號": row.serial, "廠商": row.vendor, "入庫日期": row.inboundDate, "預計銷帳日": row.payDate, "藥品名稱": row.drugName, "院內碼": row.code, "數量": row.qty||0, "單價": row.price||0, "小計": row.subtotal, "狀態": row.status, "付款歷程": row.payNote }));
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "查詢結果");
+      const todayStr = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(workbook, `藥庫查詢結果_${todayStr}.xlsx`);
+    }
+
+    function onMainVendorChange() {
+      const mainV = document.getElementById('mainVendorInput').value;
+      updateCodeDatalist(mainV);
+      document.querySelectorAll('.ib-container').forEach(row => {
+        const code = row.querySelector('.code-input').value;
+        if(code) {
+           const d = globalDrugs.find(x=>x.code==code);
+           if(d && mainV && d.vendor!==mainV) clearRow(row);
+        }
+        filterDrugsForSelect(row.querySelector('.drug-select'), mainV);
+      });
+    }
+
+    function updateCodeDatalist(vendor) {
+      const dl = document.getElementById('drugCodeList'); dl.innerHTML = '';
+      let list = vendor ? globalDrugs.filter(d=>d.vendor===vendor) : globalDrugs;
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      list.forEach(d => { let opt=document.createElement('option'); opt.value=d.code; opt.label=d.name; dl.appendChild(opt); });
+    }
+
+    // --- 核心修改：使用 inline-block 生成表格 ---
+    function addItemRow() {
+      const div = document.createElement('div'); 
+      div.className = 'ib-container'; // 使用新定義的容器類別
+      
+      div.innerHTML = `
+        <div class="ib-item w-code">
+            <input type="text" class="code-input" list="drugCodeList" onchange="onCodeInput(this)" placeholder="代碼">
+        </div>
+        
+        <div class="ib-item w-drug">
+             <div class="drug-wrap">
+                 <select class="drug-select" onchange="onDrugSelect(this)" disabled>
+                    <option value="">(先選廠商)</option>
+                 </select>
+             </div>
+        </div>
+
+        <div class="ib-item w-qty">
+            <input type="number" class="qty" oninput="calcRow(this)" placeholder="數量">
+        </div>
+
+        <div class="ib-item w-price">
+            <input type="number" class="price" readonly>
+        </div>
+        
+        <div class="ib-item w-sub">
+            <span class="subtotal" style="display:block; text-align:right;">0</span>
+        </div>
+        
+        <div class="ib-item w-btn">
+            <div style="text-align:center;">
+                <button class="btn-orange btn-small" onclick="clearRow(this.closest('.ib-container'))">清</button>
+                <button class="btn-red btn-small" onclick="removeRow(this)">刪</button>
+            </div>
+        </div>
+      `;
+      document.getElementById('itemsContainer').appendChild(div);
+      const mainV = document.getElementById('mainVendorInput').value;
+      if(mainV) filterDrugsForSelect(div.querySelector('.drug-select'), mainV);
+    }
+    
+    function filterDrugsForSelect(sel, vendor) {
+      if(!vendor) { sel.innerHTML='<option value="">(先選廠商)</option>'; sel.disabled=true; return; }
+      sel.disabled=false;
+      const list = globalDrugs.filter(d=>d.vendor===vendor);
+      if(list.length===0) { sel.innerHTML='<option>(無資料)</option>'; return; }
+      
+      list.sort((a, b) => a.name.localeCompare(b.name));
+
+      const curr = sel.value;
+      sel.innerHTML = '<option value="">請選擇...</option>' + list.map(d=>`<option value="${d.code}">${d.name}</option>`).join('');
+      if(curr && list.find(d=>d.code==curr)) sel.value=curr;
+    }
+
+    function onCodeInput(inp) {
+      const code = inp.value; const drug = globalDrugs.find(d=>d.code==code);
+      if(!drug) return;
+      const mainV = document.getElementById('mainVendorInput');
+      if(!mainV.value) { mainV.value = drug.vendor; onMainVendorChange(); }
+      else if(mainV.value !== drug.vendor) { alert("廠商不符"); inp.value=""; return; }
+      
+      const row = inp.closest('.ib-container');
+      row.querySelector('.drug-select').value = drug.code;
+      row.querySelector('.price').value = drug.price;
+      calcRow(inp);
+    }
+    
+    function onDrugSelect(sel) {
+      const row=sel.closest('.ib-container'); 
+      if(sel.value) { 
+        row.querySelector('.code-input').value=sel.value; 
+        const d=globalDrugs.find(x=>x.code==sel.value); 
+        row.querySelector('.price').value=d.price; 
+        calcRow(sel); 
+      } else clearRow(row);
+    }
+    
+    function calcRow(el) {
+      const row=el.closest('.ib-container'); 
+      const q=row.querySelector('.qty').value||0; 
+      const p=row.querySelector('.price').value||0;
+      row.querySelector('.subtotal').innerText=Math.round(q*p);
+      let t=0; document.querySelectorAll('.subtotal').forEach(s=>t+=parseFloat(s.innerText));
+      document.getElementById('calcTotal').innerText=t;
+    }
+    
+    function clearRow(row) {
+      row.querySelector('.code-input').value=''; row.querySelector('.drug-select').value='';
+      row.querySelector('.qty').value=''; row.querySelector('.price').value=''; 
+      row.querySelector('.subtotal').innerText='0';
+      let t=0; document.querySelectorAll('.subtotal').forEach(s=>t+=parseFloat(s.innerText));
+      document.getElementById('calcTotal').innerText=t;
+    }
+    
+    function removeRow(btn) { 
+      if(document.querySelectorAll('.ib-container').length>1) btn.closest('.ib-container').remove(); 
+      else clearRow(btn.closest('.ib-container')); 
+      let t=0; document.querySelectorAll('.subtotal').forEach(s=>t+=parseFloat(s.innerText));
+      document.getElementById('calcTotal').innerText=t;
+    }
+    
+    function resetForm(force) {
+      if(force && !confirm("確定清空?")) return;
+      document.getElementById('itemsContainer').innerHTML=''; 
+      document.getElementById('mainVendorInput').value='';
+      document.getElementById('calcTotal').innerText='0';
+      document.getElementById('discountAmount').value='';
+      addItemRow(); updateCodeDatalist('');
+    }
+
+    function submitInbound() {
+       // 防呆機制：防止單號還沒出來就存檔
+       const currentSerial = document.getElementById('manualSerial').value;
+       if (currentSerial === "更新中...") {
+           alert("⏳ 單號正在產生中，請稍等一兩秒後再按確認！");
+           return; 
+       }
+
+       const v = document.getElementById('mainVendorInput').value;
+       if(!v) { alert("請填廠商"); return; }
+       
+       const rows = document.querySelectorAll('.ib-container');
+       let items = [];
+       rows.forEach(r=>{
+         if(r.querySelector('.drug-select').value && r.querySelector('.qty').value>0) {
+           items.push({
+             code: r.querySelector('.drug-select').value,
+             name: r.querySelector('.drug-select').options[r.querySelector('.drug-select').selectedIndex].text,
+             qty: r.querySelector('.qty').value,
+             price: r.querySelector('.price').value,
+             subtotal: r.querySelector('.subtotal').innerText
+           });
+         }
+       });
+       if(items.length==0) { alert("無資料"); return; }
+       
+       const formDate = document.getElementById('entryDate').value;
+       const codes = items.map(item => item.code);
+
+       // 讓按鈕顯示檢查中，防止連點
+       const btn = document.querySelector('button[onclick="submitInbound()"]');
+       btn.innerText = "檢查中...";
+       btn.disabled = true;
+
+       // 呼叫後端檢查是否重複
+       google.script.run.withSuccessHandler(function(duplicates) {
+          // 恢復按鈕狀態
+          btn.innerText = "確認入庫";
+          btn.disabled = false;
+
+          // 若有重複，跳出警示框
+          if (duplicates.length > 0) {
+             const msg = "⚠️ 警示：以下品項本日已入庫過！\n\n- " + duplicates.join("\n- ") + "\n\n請問是否確定要再次入庫？";
+             if (!confirm(msg)) return; // 若使用者按取消，則終止存檔
+          }
+
+          // 確認無誤，準備存檔
+          const form = {
+            date: formDate,
+            manualSerial: document.getElementById('manualSerial').value,
+            mainVendor: v,
+            paymentTerm: document.getElementById('paymentTerm').value,
+            customPayDate: document.getElementById('customPayDate').value,
+            totalAmount: document.getElementById('calcTotal').innerText,
+            discountAmount: document.getElementById('discountAmount').value || document.getElementById('calcTotal').innerText,
+            itemsJson: JSON.stringify(items)
+          };
+          
+          google.script.run.withSuccessHandler(res=>{ 
+            alert(res.msg); 
+            resetForm(false); 
+            document.getElementById('manualSerial').value=res.nextSerial; 
+          }).saveInboundForm(form);
+
+       }).checkDuplicateInbound(formDate, codes);
+    }
+
+    function runQuery() {
+      const c = {
+        status: document.getElementById('qStatus').value,
+        vendor: document.getElementById('qVendor').value,
+        
+        // 抓取新的日期區間欄位
+        inboundStart: document.getElementById('qInboundStart').value,
+        inboundEnd: document.getElementById('qInboundEnd').value,
+        payStart: document.getElementById('qPayStart').value,
+        payEnd: document.getElementById('qPayEnd').value
+      };
+      
+      document.getElementById('queryResults').innerHTML = '<p align="center" style="font-size:1.4rem;">載入中...</p>';
+      google.script.run.withSuccessHandler(renderQueryTable).searchInboundDetails(c);
+      
+      // 清空搜尋條件 (對應你原本加上去的功能)
+      document.getElementById('qVendor').value = '';
+      document.getElementById('qInboundStart').value = '';
+      document.getElementById('qInboundEnd').value = '';
+      document.getElementById('qPayStart').value = '';
+      document.getElementById('qPayEnd').value = '';
+    }
+
+    function renderQueryTable(data) {
+      currentQueryData = data;
+      const div = document.getElementById('queryResults'); div.innerHTML = '';
+      if(data.length===0) { div.innerHTML='<p align="center" style="padding:25px; font-size:1.4rem;">無資料</p>'; return; }
+
+      const table = document.createElement('table');
+      // 加入 <th>數量</th>
+      table.innerHTML = `<thead><tr><th width="50">選</th><th>單號</th><th>藥名</th><th width="80">數量</th><th>小計</th><th>狀態</th><th>歷程</th></tr></thead>`;
+      
+      let currSerial = ""; let tbody = null; let gIdx = 0;
+      data.forEach(row => {
+        if(row.serial !== currSerial) {
+          currSerial = row.serial;
+          tbody = document.createElement('tbody');
+          tbody.className = (gIdx++%2===0)?'group-odd':'group-even';
+          
+          const header = document.createElement('tr');
+          const isVoid = row.status === '作廢';
+          const serialStyle = isVoid ? 'text-decoration: line-through; color: #999;' : '';
+          // 定義作廢按鈕
+          const voidBtn = isVoid ? 
+              '<span style="color:red; font-weight:bold;">[已作廢]</span>' : 
+              `<button class="btn-red btn-small" onclick="voidOrder('${row.serial}')">🗑️ 作廢本單</button>`;
+          
+          // 定義修改金額按鈕 (只有未作廢才能修改)
+          const editBtn = isVoid ? '' : 
+              `<button class="btn-info btn-small" style="padding:2px 10px; margin-right:10px; font-size:1rem;" onclick="editDiscount('${row.serial}', '${row.masterDiscTotal}')">✏️ 修改</button>`;
+          
+          header.innerHTML = `
+            <td><input type="checkbox" onchange="toggleGroup(this,'${row.serial}')"></td>
+            <td class="serial-text" style="${serialStyle}">${row.serial}</td>
+            <td colspan="5" style="color:var(--primary); font-size:1.3rem;">
+              <strong class="vendor-text">${row.vendor}</strong> (預計銷帳: ${row.payDate})
+              <span style="float:right;">
+                  整單折後: <strong style="color:#d81b60; margin-right:5px;">${row.masterDiscTotal}</strong>
+                  ${editBtn} | ${voidBtn}
+              </span>
+            </td>
+          `;
+          tbody.appendChild(header);
+          table.appendChild(tbody);
+        }
+        
+        let stClass = 'st-unpaid';
+        if(row.status === '作廢') stClass = 'st-void';
+        else if(row.status === '備款完成') stClass = 'st-prep';
+        else if(row.status.includes('已')) stClass = 'st-done';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input type="checkbox" class="chk-item serial-${row.serial}" value="${row.rowIndex}" 
+                      data-serial="${row.serial}" data-subtotal="${row.subtotal}" 
+                      data-status="${row.status}" onchange="calcSel()"></td>
+          <td></td>
+          <td>${row.drugName}</td>
+          <td style="font-weight:bold; color:#0288d1;">${row.qty}</td> <td>${row.subtotal}</td>
+          <td><span class="status-tag ${stClass}">${row.status}</span></td>
+          <td style="font-size:1.1rem; color:#666;">${row.payNote}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      div.appendChild(table);
+      calcSel();
+    }
+
+    function toggleGroup(cb, serial) {
+      document.querySelectorAll(`.serial-${serial}`).forEach(c => { c.checked=cb.checked; });
+      calcSel();
+    }
+
+    function calcSel() {
+      const chks = document.querySelectorAll('.chk-item:checked');
+      const grp = {}; chks.forEach(c => {
+        const s = c.getAttribute('data-serial');
+        if(!grp[s]) grp[s]=[]; grp[s].push(parseFloat(c.getAttribute('data-subtotal')));
+      });
+      let total = 0;
+      for(const [s, subs] of Object.entries(grp)) {
+        const info = currentQueryData.find(d=>d.serial===s);
+        if(info && subs.length === info.totalItemsInOrder) total += parseFloat(info.masterDiscTotal);
+        else total += subs.reduce((a,b)=>a+b,0);
+      }
+      document.getElementById('selectedTotal').innerText = total;
+    }
+
+    function executePayment() {
+      const chks = document.querySelectorAll('.chk-item:checked');
+      if(chks.length===0) { alert("未勾選"); return; }
+      const type = document.getElementById('actionType').value;
+      const date = document.getElementById('actionDate').value;
+      const amt = document.getElementById('selectedTotal').innerText;
+
+      let hasVoid = false;
+      let ids = [];
+      chks.forEach(c => {
+        if(c.getAttribute('data-status') === '作廢') hasVoid = true;
+        ids.push(c.value);
+      });
+
+      if(type !== 'revert' && hasVoid) {
+        alert("錯誤：您勾選了「已作廢」的項目！\n\n- 若要付款，請勿勾選作廢單。\n- 若要還原單據，請選擇「↩️ 救回」動作。");
+        return;
+      }
+
+      let msg = "";
+      if(type==='transfer') msg = `確認「轉帳」結案？\n日期: ${date}\n金額: ${amt}`;
+      else if(type==='cash_prep') msg = `確認「現金-已備款」？(放入櫃台)\n日期: ${date}\n金額: ${amt}`;
+      else if(type==='cash_done') msg = `確認「現金-已取款」？(廠商拿走)\n日期: ${date}\n金額: ${amt}`;
+      else msg = `確認「救回」${ids.length} 筆資料？\n這將把狀態還原為「未銷帳」。`;
+
+      if(confirm(msg)) {
+        google.script.run.withSuccessHandler(res=>{ alert(res); runQuery(); }).updatePaymentStatus(ids, type, date);
+      }
+    }
+
+    function voidOrder(serial) {
+      if(confirm(`⚠️ 警告：您確定要作廢單號 [${serial}] 嗎？`)) {
+        google.script.run.withSuccessHandler(res=>{ alert(res); runQuery(); }).voidInboundOrder(serial);
+      }
+    }
+
+    function editDiscount(serial, currentVal) {
+      const newVal = prompt(`請輸入單號 [${serial}] 新的折後總額：`, currentVal);
+      
+      // 如果使用者按取消或沒有輸入
+      if (newVal === null) return;
+      
+      // 簡單的驗證
+      if (newVal.trim() === '' || isNaN(newVal)) {
+        alert("輸入錯誤：請輸入有效的數字金額！");
+        return;
+      }
+
+      // 呼叫後端進行更新
+      google.script.run.withSuccessHandler(function(res) {
+        alert(res);
+        runQuery(); // 更新成功後，重新執行查詢以刷新畫面
+      }).updateOrderDiscount(serial, newVal);
+    }
+
+    function runAdminTask() {
+      const pwd = prompt("請輸入管理員密碼：", "");
+      if(pwd === null) return; 
+      
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      const todayStr = `${y}${m}${d}`;
+      
+      const targetDate = prompt("請輸入要抹除資料的日期 (格式 YYYYMMDD)：", todayStr);
+      if(targetDate === null) return;
+
+      if(targetDate.length !== 8 || isNaN(targetDate)) {
+        alert("格式錯誤！請輸入 8 碼數字，例如 20251215");
+        return;
+      }
+
+      if(confirm(`⚠️ 嚴重警告 ⚠️\n\n此操作將「徹底刪除」日期為【${targetDate}】的所有單據資料！\n資料刪除後無法還原！\n\n確定要執行嗎？`)) {
+        google.script.run.withSuccessHandler(res => {
+          if(res.msg) alert(res.msg);
+          else alert(res);
+          if (res.nextSerial) {
+            document.getElementById('manualSerial').value = res.nextSerial;
+          }
+          runQuery();
+        }).adminDeleteDataByDate(pwd, targetDate);
+      }
+    }
+
+    // === 新增 UI 控制：當勾選耗材群組時，停用單一藥品搜尋，避免衝突 ===
+    function toggleStatInputs() {
+      const isGroup = document.getElementById('statGroupZZ').checked;
+      const drugInput = document.getElementById('statDrug');
+      const vendorInput = document.getElementById('statVendor'); // 新增：抓取廠商欄位
+      
+      if (isGroup) {
+        // 1. 鎖定並清空「指定藥品」
+        drugInput.value = ''; 
+        drugInput.disabled = true;
+        drugInput.placeholder = "(已鎖定：群組統計)";
+        drugInput.style.backgroundColor = "#eee";
+        
+        // 2. 鎖定並清空「指定廠商」
+        vendorInput.value = ''; 
+        vendorInput.disabled = true;
+        vendorInput.placeholder = "(已鎖定：群組統計)";
+        vendorInput.style.backgroundColor = "#eee";
+        
+      } else {
+        // 1. 解除鎖定「指定藥品」
+        drugInput.disabled = false;
+        drugInput.placeholder = "選填...";
+        drugInput.style.backgroundColor = "#fff";
+        
+        // 2. 解除鎖定「指定廠商」
+        vendorInput.disabled = false;
+        vendorInput.placeholder = "廠商...";
+        vendorInput.style.backgroundColor = "#fff";
+      }
+    }
+
+    // === 修改 runStats 傳送參數 ===
+    function runStats() {
+      const criteria = {
+        startDate: document.getElementById('statStartDate').value,
+        endDate: document.getElementById('statEndDate').value,
+        vendor: document.getElementById('statVendor').value,
+        drugCode: document.getElementById('statDrug').value,
+        // 新增傳入參數：是否勾選耗材群組
+        isConsumablesGroup: document.getElementById('statGroupZZ').checked
+      };
+
+      if(!criteria.startDate || !criteria.endDate) { alert("請選擇完整的日期區間"); return; }
+      
+      document.getElementById('statsResults').innerHTML = '<p align="center">統計運算中...</p>';
+      google.script.run.withSuccessHandler(renderStatsTable).getStatisticsReport(criteria);
+    }
+    
+    // 另外建議在 clearStatsForm 也加入重置 Checkbox
+    function clearStatsForm() {
+      // ... 原有代碼 ...
+      document.getElementById('statVendor').value = '';
+      document.getElementById('statDrug').value = '';
+      
+      // 新增重置
+      document.getElementById('statGroupZZ').checked = false; 
+      toggleStatInputs(); // 重置 UI 狀態
+      
+      document.getElementById('statsResults').innerHTML = '<p style="text-align:center; color:#888; padding:25px;">條件已清空</p>';
+    }
+  </script>
+</body>
+</html>
