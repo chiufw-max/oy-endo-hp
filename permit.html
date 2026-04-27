@@ -247,6 +247,7 @@
 
     // --- 1. 全域資料庫 ---
     var currentData = {};
+    var globalPackageSelected = false; // 🌟 記憶是否選擇了套餐，跨同意書連動用
     var nurseAlreadyChecked = false; // 紀錄本次作業是否已由護理師確認過
     var consentTextData = {
       "胃鏡": `
@@ -277,6 +278,7 @@
 
     var consentItemsData = {
       "胃鏡": [
+        { id: "item_package", label: "好腸胃套餐", textColor: "text-maroon", subtext: "包含無痛、口咬器、幽門桿菌與好腸胃抽血套餐" },
         { id: "item_bite", label: "拋棄式口咬器~100元", subtext: "有活動式假牙，請記得取出" },
         { id: "item_thin", label: "超細胃鏡~500元", subtext: "口徑小，舒適度較高，可以從鼻子" },
         { id: "item_hp", label: "幽門螺旋桿菌檢查~400元" },
@@ -294,6 +296,7 @@
         { id: "pre_surgery", label: "腹腔手術病史", isPrecaution: true },
         { id: "pre_prostate", label: "攝護腺肥大", isPrecaution: true },
         { id: "pre_glaucoma", label: "青光眼", isPrecaution: true },
+        { id: "item_package", label: "好腸胃套餐", textColor: "text-maroon", subtext: "包含無痛、檢查褲、CO2充氣與好腸胃抽血套餐" },
         { id: "item_pants", label: "拋棄式檢查褲~100元" },
         { id: "item_co2", label: "二氧化碳CO2大腸鏡充氣~300元", subtext: "可以大幅降低大腸鏡後腹脹不適" },
         { id: "item_biopsy", label: "同意做組織切片檢查或瘜肉切除術", isParent: true },
@@ -431,7 +434,7 @@
         // 🌟 這裡把 subtext 的小字說明加回來了！
         var subtextHtml = item.subtext ? `<span class="small-subtext">(${item.subtext})</span>` : "";
         var html = `<div class="check-item ${item.isChild ? 'child-item' : ''}">
-                      <input type="checkbox" id="${item.id}">
+                      <input type="checkbox" id="${item.id}" onchange="handleItemChange(this.id)">
                       <div>
                         <label for="${item.id}" class="${item.textColor||''}">${item.label}</label>
                         ${subtextHtml}
@@ -447,6 +450,30 @@
           var div = document.createElement('div'); div.innerHTML = html; container.appendChild(div.firstChild); 
         }
       });
+        if (globalPackageSelected && document.getElementById('item_package')) {
+        document.getElementById('item_package').checked = true;
+        handleItemChange('item_package');
+      }
+    }
+
+    function handleItemChange(id) {
+      if (id === 'item_package') {
+        var isChecked = document.getElementById(id).checked;
+        globalPackageSelected = isChecked; // 紀錄狀態，給連續簽署使用
+        var type = document.getElementById('consentType').value;
+        
+        if (type === '胃鏡') {
+          // 連動胃鏡的 3 個項目
+          ['item_bite', 'item_hp', 'item_painless'].forEach(t => {
+            if(document.getElementById(t)) document.getElementById(t).checked = isChecked;
+          });
+        } else if (type === '大腸鏡') {
+          // 連動大腸鏡的 3 個項目
+          ['item_pants', 'item_co2', 'item_painless'].forEach(t => {
+            if(document.getElementById(t)) document.getElementById(t).checked = isChecked;
+          });
+        }
+      }
     }
 
     function toStep3() {
@@ -524,6 +551,10 @@
       document.getElementById('test_adult').checked = false;
       document.getElementById('test_gi').checked = false;
       document.getElementById('test_blood').checked = false;
+
+      if (currentData.checkItems && currentData.checkItems['item_package']) {
+        document.getElementById('test_gi').checked = true;
+      }
       
       toStep(5);
     }
@@ -600,6 +631,7 @@
       clearSig();
       toStep(1);
       nurseAlreadyChecked = false; // 換下一個病患，解除免確認金牌
+      globalPackageSelected = false;
       
       // 6. 讓畫面自動捲動到最上方
       window.scrollTo(0, 0);
