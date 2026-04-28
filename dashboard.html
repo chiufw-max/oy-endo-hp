@@ -273,7 +273,7 @@
 
     let currentRow, currentType;
     let activeInputId = 'val-p'; 
-    let selectedHp = '無'; 
+    let selectedHp = '有'; 
 
     window.onload = function() {
       // 確保一開始就觸發密碼檢查
@@ -476,7 +476,7 @@
       } else if (type === '胃鏡') {
         document.getElementById('gastro-modal-name').innerText = name;
         document.getElementById('gastro-modal').style.display = 'flex';
-        selectHp('無');
+        selectHp('有');
         document.getElementById('gastro-combine-colon').checked = false;
         toggleGastroDose();
         document.getElementById('gastro-val-p').innerText = '';
@@ -519,6 +519,12 @@
       if (isCombine) {
          pDose = "";
          dDose = "";
+      }
+
+      if (selectedHp === '無') {
+        if (!confirm("⚠️ 您選擇「未施作」幽門桿菌檢查，確定不產出 HP 報告嗎？")) {
+          return; // 按取消則留下來，不送出
+        }
       }
       
       closeGastroModal();
