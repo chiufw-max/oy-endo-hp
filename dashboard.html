@@ -443,12 +443,17 @@
         let historyHtml = "";
         if (patientHistory[p.idNo] && patientHistory[p.idNo].size > 0) {
           patientHistory[p.idNo].forEach(h => {
-            let shortName = h; // 縮寫處理讓版面更好看
-            if (h === "服用抗凝血藥物") shortName = "抗凝血";
-            if (h === "藥物過敏") shortName = "過敏";
-            if (h === "腹腔手術病史") shortName = "腹腔手術";
-            if (h === "攝護腺肥大") shortName = "攝護腺";
-            historyHtml += `<span style="font-size: 15px; font-weight: normal; padding: 3px 8px; border-radius: 6px; margin-left: 8px; border: 1px solid #e74c3c; background: #fdedec; color: #e74c3c; white-space: nowrap;">⚠️ ${shortName}</span>`;
+            let tagText = "";
+            
+            // 👇 將原本的 ! 換成 ⚠️
+            if (h === "心臟病") tagText = "⚠️心";
+            else if (h === "攝護腺肥大") tagText = "⚠️攝";
+            else if (h === "青光眼") tagText = "⚠️青";
+            
+            // 有配對到的才產生標籤
+            if (tagText !== "") {
+              historyHtml += `<span style="font-size: 16px; font-weight: bold; padding: 2px 6px; border-radius: 6px; border: 1px solid #e74c3c; background: #fdedec; color: #e74c3c; white-space: nowrap;">${tagText}</span>`;
+            }
           });
         }       
 
