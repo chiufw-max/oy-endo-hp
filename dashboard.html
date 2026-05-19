@@ -601,13 +601,14 @@
     function submitColonoscopy() {
       const pDose = document.getElementById('val-p').innerText;
       const dDose = document.getElementById('val-d').innerText;
+      
+      // 🌟 確保這裡有加，且跟上面的 HTML ID 完全一致
       const clipQty = document.getElementById('val-clip') ? document.getElementById('val-clip').innerText : '0';
       const needleQty = document.getElementById('val-needle') ? document.getElementById('val-needle').innerText : '0';
       
       closeColonModal();
-      executeComplete(pDose, dDose, null, clipQty, needleQty); // 傳遞5個參數
+      executeComplete(pDose, dDose, null, clipQty, needleQty); 
     }
-
     function executeComplete(pDose, dDose, hpStatus, clipQty = '0', needleQty = '0') {
       document.getElementById('loadingOverlay').style.display = 'flex';
       
@@ -616,7 +617,7 @@
         type: currentType, 
         pDose: pDose, 
         dDose: dDose, 
-        hpStatus: hpStatus, 
+        hpStatus: hpStatus,
         clipQty: clipQty,
         needleQty: needleQty
       })
