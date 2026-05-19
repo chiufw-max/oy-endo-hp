@@ -464,7 +464,10 @@
               </div>
             </div>
             <div class="card-body">
-              <div class="patient-name">${p.name}</div>
+              <div class="patient-name" style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; line-height: 1.2;">
+                <span>${p.name}</span>
+                ${historyHtml}
+              </div>
               <div class="patient-id">${p.idNo}</div>
               <div class="tags">${parseTags(p.allItems)}</div>
             </div>
