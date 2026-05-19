@@ -175,17 +175,17 @@
           <div style="text-align: center;">
             <div style="color: #7f8c8d; font-weight: bold; margin-bottom: 8px;">止血夾</div>
             <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-              <button style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer;" onclick="adjustQty('clip', -1)">➖</button>
+              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer;" onclick="adjustQty('clip', -1)">➖</button>
               <div id="val-clip" style="font-size: 26px; font-weight: bold; width: 30px; color: #2c3e50; text-align: center;">0</div>
-              <button style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer;" onclick="adjustQty('clip', 1)">➕</button>
+              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer;" onclick="adjustQty('clip', 1)">➕</button>
             </div>
           </div>
           <div style="text-align: center;">
             <div style="color: #7f8c8d; font-weight: bold; margin-bottom: 8px;">止血針</div>
             <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-              <button style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer;" onclick="adjustQty('needle', -1)">➖</button>
+              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer;" onclick="adjustQty('needle', -1)">➖</button>
               <div id="val-needle" style="font-size: 26px; font-weight: bold; width: 30px; color: #2c3e50; text-align: center;">0</div>
-              <button style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer;" onclick="adjustQty('needle', 1)">➕</button>
+              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer;" onclick="adjustQty('needle', 1)">➕</button>
             </div>
           </div>
         </div>
@@ -602,7 +602,7 @@
       const pDose = document.getElementById('val-p').innerText;
       const dDose = document.getElementById('val-d').innerText;
       const clipQty = document.getElementById('val-clip').innerText;
-      const needleQty = document.getElementById('val-needle').innerText; // 抓取止血針數量
+      const needleQty = document.getElementById('val-needle').innerText;
       
       closeColonModal();
       executeComplete(pDose, dDose, null, clipQty, needleQty); // 傳遞5個參數
@@ -617,6 +617,8 @@
         pDose: pDose, 
         dDose: dDose, 
         hpStatus: hpStatus 
+        clipQty: clipQty,
+        needleQty: needleQty
       })
       .then(res => {
         document.getElementById('loadingOverlay').style.display = 'none';
