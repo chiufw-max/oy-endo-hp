@@ -601,8 +601,8 @@
     function submitColonoscopy() {
       const pDose = document.getElementById('val-p').innerText;
       const dDose = document.getElementById('val-d').innerText;
-      const clipQty = document.getElementById('val-clip').innerText;
-      const needleQty = document.getElementById('val-needle').innerText;
+      const clipQty = document.getElementById('val-clip') ? document.getElementById('val-clip').innerText : '0';
+      const needleQty = document.getElementById('val-needle') ? document.getElementById('val-needle').innerText : '0';
       
       closeColonModal();
       executeComplete(pDose, dDose, null, clipQty, needleQty); // 傳遞5個參數
@@ -616,7 +616,7 @@
         type: currentType, 
         pDose: pDose, 
         dDose: dDose, 
-        hpStatus: hpStatus 
+        hpStatus: hpStatus, 
         clipQty: clipQty,
         needleQty: needleQty
       })
