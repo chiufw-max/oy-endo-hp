@@ -397,6 +397,9 @@
         if (allItemsStr.includes("拒絕病理")) tagsHtml += `<span class="tag tag-red">拒絕病理</span>`;
         return tagsHtml; // 提早結束，隱藏其他多餘的標籤
       }
+      if (allItemsStr.includes("心臟病")) tagsHtml += `<span class="tag tag-red">⚠️ 心臟病</span>`;
+      if (allItemsStr.includes("攝護腺肥大")) tagsHtml += `<span class="tag tag-red">⚠️ 攝護腺</span>`;
+      if (allItemsStr.includes("青光眼")) tagsHtml += `<span class="tag tag-red">⚠️ 青光眼</span>`;
       
       if (allItemsStr.includes("口咬器")) tagsHtml += `<span class="tag tag-bite">口咬器</span>`;
       if (allItemsStr.includes("超細")) tagsHtml += `<span class="tag tag-thin">超細</span>`;
