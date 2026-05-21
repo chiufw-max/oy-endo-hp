@@ -147,6 +147,7 @@
 
   <div id="step3" class="layer">
     <h2>3. 確認勾選並簽名</h2>
+    <div id="patient-info-summary" style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px; font-size:16px; border-left:5px solid #3498db; line-height: 1.6;"></div>
     <div class="summary-box"><strong>已勾選項目：</strong><div id="checkedSummary"></div></div>
     <p style="color: #c0392b; font-weight: bold;">本人已充分閱讀並了解處置內容及風險，確認上述資料無誤。</p>
     <canvas id="sig-canvas"></canvas>
@@ -166,10 +167,9 @@
 
   <div id="step5" class="layer" style="border-top: 8px solid #3498db; background-color: #ebf5fb;">
     <h2 style="color: #2980b9;">⚕️ 護理人員確認專區</h2>
-    <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #bdc3c7;">
-      <p style="margin: 0; font-size: 18px;"><strong>病患姓名：</strong><span id="nurse-patient-name" style="color: #e67e22;"></span></p>
-      <p style="margin: 5px 0 0 0; font-size: 18px;"><strong>檢查項目：</strong><span id="nurse-exam-type"></span></p>
-    </div>
+    
+    <div id="nurse-patient-summary" style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #bdc3c7; border-left: 6px solid #2980b9; font-size: 18px; line-height: 1.6;">
+      </div>
 
     <h3 style="color: #2c3e50; margin-top: 25px;">加選檢驗標記 (將顯示於二樓)</h3>
     <div class="card-group" style="border-left-color: #e74c3c; background: #fff; border: 1px solid #bdc3c7; border-radius: 8px; padding: 5px 15px;">
@@ -492,6 +492,7 @@
         } else { currentData.checkItems[item.id] = false; }
       });
       document.getElementById('checkedSummary').innerHTML = summary || "無勾選項目";
+      updateSignaturePageSummary();
       toStep(3);
     }
 
@@ -653,6 +654,77 @@
       } else {
         cancelFullScreen.call(doc);
         fsBtn.innerHTML = "⛶"; // 變回放大圖示
+      }
+    }
+    function updateNurseSummary() {
+      // 1. 抓取基本資料
+      var name = document.getElementById('name').value.trim() || "未填寫";
+      var idNo = document.getElementById('idNo').value.trim().toUpperCase() || "未填寫";
+      var medNo = document.getElementById('medRecordNo').value.trim() || "未填寫";
+      var type = currentData.type || "未選擇";
+
+      // 2. 抓取病患在 Step 2 勾選的自費/特殊項目
+      var checkedLabels = [];
+      var checkboxes = document.querySelectorAll('#checkItemsContainer input[type="checkbox"]:checked');
+      checkboxes.forEach(function(cb) {
+        // 抓取選項旁邊的文字標籤
+        var labelText = cb.nextElementSibling ? cb.nextElementSibling.innerText : cb.value;
+        checkedLabels.push(labelText);
+      });
+      var itemsStr = checkedLabels.length > 0 ? checkedLabels.join('、<br>') : "無加選項目";
+
+      // 3. 組合 HTML 並塞入護理師核對框
+      var summaryDiv = document.getElementById('nurse-patient-summary');
+      if (summaryDiv) {
+        summaryDiv.innerHTML = `
+          <strong>病患姓名：</strong><span style="color: #e67e22;">${name}</span><br>
+          <strong>檢查項目：</strong>${type}<br>
+          <strong>病歷號：</strong>${medNo} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>身分證字號：</strong>${idNo}
+          <div style="margin-top:12px; padding-top:12px; border-top: 2px dashed #bdc3c7;">
+            <strong>☑️ 病患已勾選確認項目：</strong><br>
+            <span style="color: #27ae60; font-weight: bold; line-height: 1.8;">${itemsStr}</span>
+          </div>
+        `;
+      }
+    }
+    function updateSignaturePageSummary() {
+      // 1. 抓取基本資料 (優先從 currentData 抓，若無則抓畫面)
+      var name = currentData.name || document.getElementById('name').value.trim();
+      var medNo = currentData.medRecordNo || document.getElementById('medRecordNo').value.trim();
+      var pId = currentData.idNo || document.getElementById('idNo').value.trim().toUpperCase();
+      var sId = currentData.signerIdNo || document.getElementById('signerIdNo').value.trim().toUpperCase();
+      var rel = currentData.relation || document.getElementById('relationSelect').value;
+
+      // 判斷是否有非本人的簽署人
+      var signerStr = "";
+      if (rel !== '本人' && rel !== "") {
+        signerStr = `<br><span style="color:#e74c3c;"><strong>簽署人關係：</strong>${rel} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>簽署人身分證：</strong>${sId}</span>`;
+      }
+
+      // 填入上方病患資訊總表
+      var infoSummary = document.getElementById('patient-info-summary');
+      if (infoSummary) {
+        infoSummary.innerHTML = `
+          <strong>病患姓名：</strong>${name} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>病歷號：</strong>${medNo} <br>
+          <strong>身分證字號：</strong>${pId} 
+          ${signerStr}
+        `;
+      }
+
+      // 2. 抓取已勾選項目
+      var checkedLabels = [];
+      // 確保這裡的選擇器對應到您 Step 2 裡面的 checkbox 容器 ID
+      var checkboxes = document.querySelectorAll('#checkItemsContainer input[type="checkbox"]:checked'); 
+      checkboxes.forEach(function(cb) {
+        var labelText = cb.nextElementSibling ? cb.nextElementSibling.innerText : cb.value;
+        checkedLabels.push(labelText);
+      });
+      
+      // 填入下方已勾選項目框，加上綠色打勾增加確認感
+      var itemsStr = checkedLabels.length > 0 ? checkedLabels.join('<br>✅ ') : "未加選任何項目";
+      var checkedSummary = document.getElementById('checkedSummary');
+      if (checkedSummary) {
+        checkedSummary.innerHTML = (checkedLabels.length > 0 ? "✅ " : "") + itemsStr;
       }
     }
   </script>
