@@ -116,7 +116,8 @@
     </div>
     
     <label class="field-label">執行醫師</label>
-    <select id="doctorSelect">
+    <select id="doctorSelect" required style="width: 100%; padding: 10px; font-size: 18px;">
+      <option value="" disabled selected hidden>請選擇執行醫師</option>
       <option value="邱芳瑋">邱芳瑋 醫師</option>
       <option value="胡必雄">胡必雄 醫師</option>
       <option value="賴佳業">賴佳業 醫師</option>
@@ -393,17 +394,19 @@
       var pId = document.getElementById('idNo').value.trim().toUpperCase();
       var sId = document.getElementById('signerIdNo').value.trim().toUpperCase();
       var rel = document.getElementById('relationSelect').value;
+      var doctor = document.getElementById('doctorSelect').value;
       var idRegex = /^[A-Z]{1,2}[0-9]{8,9}$/;
 
       if (!medNo) return alert("請輸入病歷號！");
       if (!name || !pId || !rel || !phone) return alert("請填寫所有必填欄位！");
       if (rel !== '本人' && !sId) return alert("請填寫立同意書人身分證字號！");
+      if (!doctor) return alert("請選擇執行醫師！");
 
       currentData = {
         medRecordNo: medNo,
         name: name, idNo: pId, signerIdNo: sId, phone: document.getElementById('phone').value,
         type: document.getElementById('consentType').value,
-        doctor: document.getElementById('doctorSelect').value,
+        doctor: doctor,
         relation: (rel === '其他') ? document.getElementById('relationCustom').value : rel
       };
 
