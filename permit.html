@@ -179,7 +179,6 @@
     </div>
 
     <button onclick="saveAll()" style="background: #2980b9;">📥 確認送出並存檔</button>
-    <button class="btn-secondary" onclick="toStep(4)">返回上一頁</button>
   </div>
 
   <div id="step6" class="layer" style="text-align:center;">
@@ -579,6 +578,7 @@
     
     // 進入護理師專區 (Step 5)
     // 進入護理師專區 (Step 5)
+    // 進入護理師專區 (Step 5)
     function toStep5() {
       try {
         // 1. 安全抓取基本資料
@@ -596,7 +596,7 @@
           }
         }
 
-        // 3. 填入護理師核對總表
+        // 3. 填入護理師核對總表 (👇 這裡加入了排版與修改按鈕)
         var summaryDiv = document.getElementById('nurse-patient-summary');
         if (summaryDiv) {
           summaryDiv.innerHTML = `
@@ -604,7 +604,10 @@
             <strong>檢查項目：</strong>${type}<br>
             <strong>病歷號：</strong>${medNo} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>身分證字號：</strong>${idNo}
             <div style="margin-top:12px; padding-top:12px; border-top: 2px dashed #bdc3c7;">
-              <strong>☑️ 病患已勾選確認項目：</strong><br>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <strong>☑️ 病患已勾選確認項目：</strong>
+                <button onclick="clearSig(); toStep(2);" style="background: #f39c12; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">✏️ 修改項目</button>
+              </div>
               <span style="color: #27ae60; font-weight: bold; line-height: 1.8;">${itemsStr}</span>
             </div>
           `;
