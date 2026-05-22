@@ -403,7 +403,7 @@
       let finalHtml = "";
 
       const btn = document.getElementById('cal-view-btn');
-      if(btn) btn.innerText = showAllDayCalendar ? "切換為當前診段" : "顯示全天";
+      if(btn) btn.innerText = showAllDayCalendar ? "當前" : "全天";
       
       if (showAllDayCalendar) {
         finalHtml += getSectionHtml("☀️ 早診 (08:00-12:00)", s.morning, "tag-morning");
@@ -511,7 +511,6 @@
               </div>
               <div style="display: flex; align-items: center; gap: 5px;">
                 <span style="font-size:16px; color:#95a5a6;">${p.doctor} 醫師</span>
-                // ✅ 這是絕對安全的寫法（注意第三個變數外面的 \` ）
                 <button class="btn-edit" style="font-size: 20px; padding: 2px;" onclick="openEditModal(${p.row}, '${p.type}', \`${p.allItems || ''}\`)" title="修改項目">✏️</button>
               </div>
             </div>
