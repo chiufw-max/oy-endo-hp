@@ -713,11 +713,33 @@
 
       // 2. 抓取已勾選項目
       var checkedLabels = [];
-      // 確保這裡的選擇器對應到您 Step 2 裡面的 checkbox 容器 ID
-      var checkboxes = document.querySelectorAll('#checkItemsContainer input[type="checkbox"]:checked'); 
+      
+      // 👇 改變搜尋策略：直接去「第二頁 (step2)」裡面找所有被打勾的項目
+      // (請確認您第二頁同意書內容的 div id 是不是 step2，如果不是請換成對應的 id)
+      var checkboxes = document.querySelectorAll('#step2 input[type="checkbox"]:checked'); 
+      
       checkboxes.forEach(function(cb) {
-        var labelText = cb.nextElementSibling ? cb.nextElementSibling.innerText : cb.value;
-        checkedLabels.push(labelText);
+        var labelText = "";
+        
+        // 智慧判斷：涵蓋所有常見的 HTML 寫法，絕對把文字挖出來！
+        if (cb.labels && cb.labels.length > 0) {
+          // 寫法 A: <label><input>項目名稱</label>
+          labelText = cb.labels[0].innerText.trim();
+        } else if (cb.parentNode && cb.parentNode.tagName === 'LABEL') {
+          // 寫法 B: 另一種 Label 包覆法
+          labelText = cb.parentNode.innerText.trim();
+        } else if (cb.nextElementSibling) {
+          // 寫法 C: <input> <span>項目名稱</span>
+          labelText = cb.nextElementSibling.innerText.trim();
+        } else {
+          // 寫法 D: 真的抓不到文字，就抓 value 屬性
+          labelText = cb.value; 
+        }
+
+        // 只要有抓到字，就存進陣列裡
+        if (labelText && labelText !== "on") {
+          checkedLabels.push(labelText);
+        }
       });
       
       // 填入下方已勾選項目框，加上綠色打勾增加確認感
