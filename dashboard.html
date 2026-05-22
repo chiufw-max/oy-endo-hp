@@ -304,9 +304,9 @@
     let currentRow, currentType;
     let activeInputId = 'val-p'; 
     let selectedHp = '有'; 
+    let showAllDayCalendar = localStorage.getItem('dashboard_cal_view') === 'allDay';
 
     window.onload = function() {
-      // 確保一開始就觸發密碼檢查
       let token = localStorage.getItem("dashboard_clinic_token");
       if (!token) {
         token = prompt("🔒 系統已上鎖：\n請輸入歐葉診所專屬授權密碼：");
@@ -347,6 +347,14 @@
       calCol.classList.toggle('hidden');
     }
 
+    function toggleCalendarView() {
+      showAllDayCalendar = !showAllDayCalendar;
+      localStorage.setItem('dashboard_cal_view', showAllDayCalendar ? 'allDay' : 'session');
+      if (window.lastCalendarData) {
+        renderCalendar(window.lastCalendarData); 
+      }
+    }
+
     function loadCalendar() {
       document.getElementById('calendar-list').innerHTML = "載入排程中...";
       callGAS("getCalendarEvents")
@@ -360,6 +368,10 @@
 
     function renderCalendar(response) {
       window.lastCalendarData = response;
+      
+      // 🌟 核心修正 2：每次重新整理渲染時，強制同步最新記憶狀態，確保重新整理不重置！
+      showAllDayCalendar = localStorage.getItem('dashboard_cal_view') === 'allDay';
+      
       const container = document.getElementById('calendar-list');
       const s = response.data;
       const getSectionHtml = (title, list, colorClass) => {
@@ -429,11 +441,10 @@
       if (!allItemsStr) return tagsHtml;
 
       if (allItemsStr.includes("好腸胃套餐")) {
-        // 給套餐一個專屬的高級金色標籤
         tagsHtml += `<span class="tag" style="background: linear-gradient(135deg, #f1c40f, #f39c12); color: white; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">👑 好腸胃套餐</span>`;
         if (allItemsStr.includes("幽門螺旋桿菌")) tagsHtml += `<span class="tag tag-hp">HP</span>`;
         if (allItemsStr.includes("拒絕病理")) tagsHtml += `<span class="tag tag-red">拒絕病理</span>`;
-        return tagsHtml; // 提早結束，隱藏其他多餘的標籤
+        return tagsHtml;
       }
       
       if (allItemsStr.includes("口咬器")) tagsHtml += `<span class="tag tag-bite">口咬器</span>`;
@@ -482,13 +493,10 @@
         if (patientHistory[p.idNo] && patientHistory[p.idNo].size > 0) {
           patientHistory[p.idNo].forEach(h => {
             let tagText = "";
-            
-            // 👇 將原本的 ! 換成 ⚠️
             if (h === "心臟病") tagText = "⚠️心";
             else if (h === "攝護腺肥大") tagText = "⚠️攝";
             else if (h === "青光眼") tagText = "⚠️青";
             
-            // 有配對到的才產生標籤
             if (tagText !== "") {
               historyHtml += `<span style="font-size: 16px; font-weight: bold; padding: 2px 6px; border-radius: 6px; border: 1px solid #e74c3c; background: #fdedec; color: #e74c3c; white-space: nowrap;">${tagText}</span>`;
             }
@@ -529,17 +537,12 @@
       document.getElementById(wrapId).classList.add('active');
     }
     function typeNum(num) { 
-     let el = document.getElementById(activeInputId); 
-  
-  // 🌟 防呆：如果要輸入的是小數點，且畫面上已經有小數點了，就不做任何動作
-     if (num === '.' && el.innerText.includes('.')) return;
-  
-  // 如果有包含小數點，總長度限制可以稍微放寬一點 (例如從 4 改成 5)
-     if (el.innerText.length < 5) el.innerText += num; 
-   }
+      let el = document.getElementById(activeInputId); 
+      if (num === '.' && el.innerText.includes('.')) return;
+      if (el.innerText.length < 5) el.innerText += num; 
+    }
     function delNum() { let el = document.getElementById(activeInputId); el.innerText = el.innerText.slice(0, -1); }
     function clearNum() { document.getElementById(activeInputId).innerText = ''; }
-
 
     function handleComplete(row, type, name) {
       currentRow = row; currentType = type;
@@ -601,12 +604,12 @@
 
       if (selectedHp === '無') {
         if (!confirm("⚠️ 您選擇「未施作」幽門桿菌檢查，確定不產出 HP 報告嗎？")) {
-          return; // 按取消則留下來，不送出
+          return;
         }
       }
       
       closeGastroModal();
-      executeComplete(pDose, dDose, selectedHp);
+      executeComplete(pDose, dDose, selectedHp, '0', '0'); 
     }
 
     function closeColonModal() { document.getElementById('dose-modal').style.display = 'none'; }
@@ -615,13 +618,13 @@
       const pDose = document.getElementById('val-p').innerText;
       const dDose = document.getElementById('val-d').innerText;
       
-      // 🌟 確保這裡有加，且跟上面的 HTML ID 完全一致
       const clipQty = document.getElementById('val-clip') ? document.getElementById('val-clip').innerText : '0';
       const needleQty = document.getElementById('val-needle') ? document.getElementById('val-needle').innerText : '0';
       
       closeColonModal();
       executeComplete(pDose, dDose, null, clipQty, needleQty); 
     }
+
     function executeComplete(pDose, dDose, hpStatus, clipQty = '0', needleQty = '0') {
       document.getElementById('loadingOverlay').style.display = 'flex';
       
@@ -643,51 +646,6 @@
       });
     }
 
-    function toggleFullScreen() {
-      var doc = window.document; var docEl = doc.documentElement;
-      var requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
-      var cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
-      var fsBtn = document.getElementById('fsBtn');
-      if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) { requestFullScreen.call(docEl); fsBtn.innerHTML = "✖"; } 
-      else { cancelFullScreen.call(doc); fsBtn.innerHTML = "⛶"; }
-    }
-
-    let currentEditRow = null; let currentEditType = null;
-    let currentAllItems = "";
-    const dashItemsData = {
-      "胃鏡": [
-        { id: "item_package", label: "好腸胃套餐" },
-        { id: "item_bite", label: "拋棄式口咬器~100元" }, { id: "item_thin", label: "超細胃鏡~500元" },
-        { id: "item_hp", label: "幽門螺旋桿菌檢查~400元" }, { id: "item_biopsy", label: "同意做組織切片檢查或瘜肉切除術" },
-        { id: "item_clip", label: "拋棄式止血夾~900元/支" }, { id: "item_needle", label: "自費拋棄式止血針~800元/次" },
-        { id: "item_refuse", label: "拒絕病理切片檢查" }, { id: "item_painless", label: "無痛胃鏡檢查~2600元" }
-      ],
-      "大腸鏡": [
-        { id: "item_package", label: "好腸胃套餐" },
-        { id: "item_pants", label: "拋棄式檢查褲~100元" }, 
-        { id: "item_co2", label: "二氧化碳CO2大腸鏡充氣~300元" },
-        { id: "item_biopsy", label: "同意做組織切片檢查或瘜肉切除術" }, 
-        { id: "item_clip", label: "拋棄式止血夾(傷口縫合)~900元/支" },
-        { id: "item_needle", label: "拋棄式止血針~800元" }, 
-        { id: "item_painless", label: "無痛大腸鏡檢查~3600元" }
-      ]
-    };
-
-    function openEditModal(row, type, allItemsStr) {
-      currentEditRow = row; currentEditType = type;
-      currentAllItems = allItemsStr;
-      document.getElementById('edit-modal-name').innerText = type + " 項目";
-      const container = document.getElementById('edit-checkbox-container'); container.innerHTML = '';
-      const items = dashItemsData[type] || [];
-      items.forEach(item => {
-        const isChecked = allItemsStr.includes(item.label) ? "checked" : "";
-        container.innerHTML += `<label class="edit-check-item"><input type="checkbox" id="edit_${item.id}" value="${item.label}" ${isChecked}> ${item.label}</label>`;
-      });
-      document.getElementById('edit-modal').style.display = 'flex';
-    }
-
-    function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
-    
     function saveEditItems() {
       const items = dashItemsData[currentEditType] || []; const checkedLabels = [];
       items.forEach(item => { const cb = document.getElementById('edit_' + item.id); if (cb && cb.checked) checkedLabels.push(item.label); });
@@ -709,12 +667,27 @@
         });
     }
 
+    function openEditModal(row, type, allItemsStr) {
+      currentEditRow = row; currentEditType = type;
+      currentAllItems = allItemsStr;
+      document.getElementById('edit-modal-name').innerText = type + " 項目";
+      const container = document.getElementById('edit-checkbox-container'); container.innerHTML = '';
+      const items = dashItemsData[type] || [];
+      items.forEach(item => {
+        const isChecked = allItemsStr.includes(item.label) ? "checked" : "";
+        container.innerHTML += `<label class="edit-check-item"><input type="checkbox" id="edit_${item.id}" value="${item.label}" ${isChecked}> ${item.label}</label>`;
+      });
+      document.getElementById('edit-modal').style.display = 'flex';
+    }
+
+    function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
+
     function adjustQty(type, amount) {
       const el = document.getElementById('val-' + type);
-      let newVal = parseInt(el.innerText) + amount;
-      if (newVal < 0) newVal = 0; // 不允許負數
-      el.innerText = newVal;
+      if (el) {
+        let newVal = parseInt(el.innerText) + amount;
+        if (newVal < 0) newVal = 0; 
+        el.innerText = newVal;
+      }
     }
   </script>
-</body>
-</html>
