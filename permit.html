@@ -578,22 +578,55 @@
     }
     
     // 進入護理師專區 (Step 5)
+    // 進入護理師專區 (Step 5)
     function toStep5() {
-      document.getElementById('nurse-patient-name').innerText = currentData.name;
-      document.getElementById('nurse-exam-type').innerText = currentData.type;
-      
-      // 清空前一位的勾選
-      document.getElementById('test_adult').checked = false;
-      document.getElementById('test_gi').checked = false;
-      document.getElementById('test_blood').checked = false;
+      try {
+        // 1. 安全抓取基本資料
+        var name = (typeof currentData !== 'undefined' && currentData.name) ? currentData.name : "未填寫 (測試中)";
+        var idNo = (typeof currentData !== 'undefined' && currentData.idNo) ? currentData.idNo : "未填寫";
+        var medNo = (typeof currentData !== 'undefined' && currentData.medRecordNo) ? currentData.medRecordNo : "未填寫";
+        var type = (typeof currentData !== 'undefined' && currentData.type) ? currentData.type : "未選擇";
 
-      if (currentData.checkItems && currentData.checkItems['item_package']) {
-        document.getElementById('test_gi').checked = true;
+        // 2. 直接從系統記憶中撈取剛剛勾選的項目
+        var itemsStr = "無加選或病史項目";
+        if (typeof currentData !== 'undefined' && currentData.checkItemLabels) {
+          var labels = Object.values(currentData.checkItemLabels);
+          if (labels.length > 0) {
+            itemsStr = labels.join('、<br>');
+          }
+        }
+
+        // 3. 填入護理師核對總表
+        var summaryDiv = document.getElementById('nurse-patient-summary');
+        if (summaryDiv) {
+          summaryDiv.innerHTML = `
+            <strong>病患姓名：</strong><span style="color: #e67e22; font-weight:bold;">${name}</span><br>
+            <strong>檢查項目：</strong>${type}<br>
+            <strong>病歷號：</strong>${medNo} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>身分證字號：</strong>${idNo}
+            <div style="margin-top:12px; padding-top:12px; border-top: 2px dashed #bdc3c7;">
+              <strong>☑️ 病患已勾選確認項目：</strong><br>
+              <span style="color: #27ae60; font-weight: bold; line-height: 1.8;">${itemsStr}</span>
+            </div>
+          `;
+        }
+
+        // 4. 清空前一位的加選檢驗標記
+        if(document.getElementById('test_adult')) document.getElementById('test_adult').checked = false;
+        if(document.getElementById('test_gi')) document.getElementById('test_gi').checked = false;
+        if(document.getElementById('test_blood')) document.getElementById('test_blood').checked = false;
+
+        // 如果病患有買套餐，自動幫護理師勾選「好腸胃套餐(血+尿)」
+        if (typeof currentData !== 'undefined' && currentData.checkItems && currentData.checkItems['item_package']) {
+          if(document.getElementById('test_gi')) document.getElementById('test_gi').checked = true;
+        }
+
+      } catch(e) {
+        console.log("護理師資料抓取發生錯誤:", e);
       }
-      
+
+      // 安全切換到第 5 頁
       toStep(5);
     }
-
     // 護理師最後點擊的送出 (合併檢驗項目後呼叫後端)
     function saveAll() {
       var labTests = [];
@@ -685,110 +718,6 @@
       } else {
         cancelFullScreen.call(doc);
         fsBtn.innerHTML = "⛶"; // 變回放大圖示
-      }
-    }
-    function updateNurseSummary() {
-      // 1. 抓取基本資料
-      var name = document.getElementById('name').value.trim() || "未填寫";
-      var idNo = document.getElementById('idNo').value.trim().toUpperCase() || "未填寫";
-      var medNo = document.getElementById('medRecordNo').value.trim() || "未填寫";
-      var type = currentData.type || "未選擇";
-
-      // 2. 抓取病患在 Step 2 勾選的自費/特殊項目
-      var checkedLabels = [];
-      var checkboxes = document.querySelectorAll('#checkItemsContainer input[type="checkbox"]:checked');
-      checkboxes.forEach(function(cb) {
-        // 抓取選項旁邊的文字標籤
-        var labelText = cb.nextElementSibling ? cb.nextElementSibling.innerText : cb.value;
-        checkedLabels.push(labelText);
-      });
-      var itemsStr = checkedLabels.length > 0 ? checkedLabels.join('、<br>') : "無加選項目";
-
-      // 3. 組合 HTML 並塞入護理師核對框
-      var summaryDiv = document.getElementById('nurse-patient-summary');
-      if (summaryDiv) {
-        summaryDiv.innerHTML = `
-          <strong>病患姓名：</strong><span style="color: #e67e22;">${name}</span><br>
-          <strong>檢查項目：</strong>${type}<br>
-          <strong>病歷號：</strong>${medNo} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>身分證字號：</strong>${idNo}
-          <div style="margin-top:12px; padding-top:12px; border-top: 2px dashed #bdc3c7;">
-            <strong>☑️ 病患已勾選確認項目：</strong><br>
-            <span style="color: #27ae60; font-weight: bold; line-height: 1.8;">${itemsStr}</span>
-          </div>
-        `;
-      }
-    }
-    function updateSignaturePageSummary() {
-      // 1. 抓取基本資料 (優先從 currentData 抓，若無則抓畫面)
-      var name = currentData.name || document.getElementById('name').value.trim();
-      var medNo = currentData.medRecordNo || document.getElementById('medRecordNo').value.trim();
-      var pId = currentData.idNo || document.getElementById('idNo').value.trim().toUpperCase();
-      var sId = currentData.signerIdNo || document.getElementById('signerIdNo').value.trim().toUpperCase();
-      var rel = currentData.relation || document.getElementById('relationSelect').value;
-
-      // 判斷是否有非本人的簽署人
-      var signerStr = "";
-      if (rel !== '本人' && rel !== "") {
-        signerStr = `<br><span style="color:#e74c3c;"><strong>簽署人關係：</strong>${rel} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>簽署人身分證：</strong>${sId}</span>`;
-      }
-
-      // 填入上方病患資訊總表
-      var infoSummary = document.getElementById('patient-info-summary');
-      if (infoSummary) {
-        infoSummary.innerHTML = `
-          <strong>病患姓名：</strong>${name} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>病歷號：</strong>${medNo} <br>
-          <strong>身分證字號：</strong>${pId} 
-          ${signerStr}
-        `;
-      }
-
-      // 2. 抓取已勾選項目
-      var checkedLabels = [];
-      
-      // 👇 改變搜尋策略：直接去「第二頁 (step2)」裡面找所有被打勾的項目
-      // (請確認您第二頁同意書內容的 div id 是不是 step2，如果不是請換成對應的 id)
-      var checkboxes = document.querySelectorAll('#step2 input[type="checkbox"]:checked'); 
-      
-      checkboxes.forEach(function(cb) {
-        var labelText = "";
-        
-        // 智慧判斷：涵蓋所有常見的 HTML 寫法，絕對把文字挖出來！
-        if (cb.labels && cb.labels.length > 0) {
-          // 寫法 A: <label><input>項目名稱</label>
-          labelText = cb.labels[0].innerText.trim();
-        } else if (cb.parentNode && cb.parentNode.tagName === 'LABEL') {
-          // 寫法 B: 另一種 Label 包覆法
-          labelText = cb.parentNode.innerText.trim();
-        } else if (cb.nextElementSibling) {
-          // 寫法 C: <input> <span>項目名稱</span>
-          labelText = cb.nextElementSibling.innerText.trim();
-        } else {
-          // 寫法 D: 真的抓不到文字，就抓 value 屬性
-          labelText = cb.value; 
-        }
-
-        // 只要有抓到字，就存進陣列裡
-        if (labelText && labelText !== "on") {
-          checkedLabels.push(labelText);
-        }
-      });
-      
-      // 填入下方已勾選項目框，加上綠色打勾增加確認感
-      var itemsHtml = "";
-      if (checkedLabels.length > 0) {
-        checkedLabels.forEach(function(label) {
-          // 為每個選項建立獨立的圓角標籤 (採用清爽的醫療綠色系)
-          itemsHtml += `<span style="display: inline-block; background: #e8f8f5; color: #16a085; border: 1px solid #1abc9c; border-radius: 20px; padding: 6px 14px; margin: 4px 6px 4px 0; font-size: 16px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">☑️ ${label}</span>`;
-        });
-      } else {
-        // 未勾選時的空狀態提示
-        itemsHtml = '<span style="color: #95a5a6; font-style: italic; padding: 5px;">未加選任何項目</span>';
-      }
-      
-      var checkedSummary = document.getElementById('checkedSummary');
-      if (checkedSummary) {
-        // 清空原本可能有的純文字，直接放入精美的標籤
-        checkedSummary.innerHTML = itemsHtml;
       }
     }
   </script>
