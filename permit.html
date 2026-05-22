@@ -743,10 +743,21 @@
       });
       
       // 填入下方已勾選項目框，加上綠色打勾增加確認感
-      var itemsStr = checkedLabels.length > 0 ? checkedLabels.join('<br>✅ ') : "未加選任何項目";
+      var itemsHtml = "";
+      if (checkedLabels.length > 0) {
+        checkedLabels.forEach(function(label) {
+          // 為每個選項建立獨立的圓角標籤 (採用清爽的醫療綠色系)
+          itemsHtml += `<span style="display: inline-block; background: #e8f8f5; color: #16a085; border: 1px solid #1abc9c; border-radius: 20px; padding: 6px 14px; margin: 4px 6px 4px 0; font-size: 16px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">☑️ ${label}</span>`;
+        });
+      } else {
+        // 未勾選時的空狀態提示
+        itemsHtml = '<span style="color: #95a5a6; font-style: italic; padding: 5px;">未加選任何項目</span>';
+      }
+      
       var checkedSummary = document.getElementById('checkedSummary');
       if (checkedSummary) {
-        checkedSummary.innerHTML = (checkedLabels.length > 0 ? "✅ " : "") + itemsStr;
+        // 清空原本可能有的純文字，直接放入精美的標籤
+        checkedSummary.innerHTML = itemsHtml;
       }
     }
   </script>
