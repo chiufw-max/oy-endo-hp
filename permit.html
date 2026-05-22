@@ -480,19 +480,50 @@
     }
 
     function toStep3() {
+      // 1. 🌟 保留您原本最完美的資料綁定與標籤生成邏輯
       currentData.checkItems = {};
       currentData.checkItemLabels = {};
       var summary = "";
-      consentItemsData[currentData.type].forEach(item => {
-        var chk = document.getElementById(item.id);
-        if (chk && chk.checked) {
-          currentData.checkItems[item.id] = true;
-          currentData.checkItemLabels[item.id] = item.label;
-          summary += `<span class="summary-tag" style="${item.isPrecaution?'background:#e67e22':''}">${item.label}</span>`;
-        } else { currentData.checkItems[item.id] = false; }
-      });
-      document.getElementById('checkedSummary').innerHTML = summary || "無勾選項目";
-      updateSignaturePageSummary();
+      
+      if (consentItemsData && consentItemsData[currentData.type]) {
+        consentItemsData[currentData.type].forEach(item => {
+          var chk = document.getElementById(item.id);
+          if (chk && chk.checked) {
+            currentData.checkItems[item.id] = true;
+            currentData.checkItemLabels[item.id] = item.label;
+            // 完美恢復您的 .summary-tag 以及橘色警示判斷
+            summary += `<span class="summary-tag" style="${item.isPrecaution ? 'background:#e67e22' : ''}">${item.label}</span>`;
+          } else { 
+            currentData.checkItems[item.id] = false; 
+          }
+        });
+      }
+      
+      document.getElementById('checkedSummary').innerHTML = summary || "<span style='color:#7f8c8d;'>無加選或病史項目</span>";
+
+
+      // 2. 👇 新增：在畫面上方動態生成病患核對總表
+      var name = currentData.name || document.getElementById('name').value.trim();
+      var medNo = currentData.medRecordNo || document.getElementById('medRecordNo').value.trim();
+      var pId = currentData.idNo || document.getElementById('idNo').value.trim().toUpperCase();
+      var sId = currentData.signerIdNo || document.getElementById('signerIdNo').value.trim().toUpperCase();
+      var rel = currentData.relation || document.getElementById('relationSelect').value;
+
+      var signerStr = "";
+      if (rel !== '本人' && rel !== "") {
+        signerStr = `<br><span style="color:#e74c3c;"><strong>簽署人關係：</strong>${rel} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>簽署人身分證：</strong>${sId}</span>`;
+      }
+
+      var infoSummary = document.getElementById('patient-info-summary');
+      if (infoSummary) {
+        infoSummary.innerHTML = `
+          <strong>病患姓名：</strong><span style="color:#2980b9;">${name}</span> &nbsp;&nbsp;|&nbsp;&nbsp; <strong>病歷號：</strong>${medNo} <br>
+          <strong>身分證字號：</strong>${pId} 
+          ${signerStr}
+        `;
+      }
+
+      // 3. 切換到第三頁
       toStep(3);
     }
 
