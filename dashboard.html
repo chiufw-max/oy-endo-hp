@@ -511,7 +511,7 @@
               </div>
               <div style="display: flex; align-items: center; gap: 5px;">
                 <span style="font-size:16px; color:#95a5a6;">${p.doctor} 醫師</span>
-                <button class="btn-edit" style="font-size: 20px; padding: 2px;" onclick="openEditModal(${p.row}, '${p.type}', \`${p.allItems || ''}\`)" title="修改項目">✏️</button>
+                <button class="btn-edit" style="font-size: 20px; padding: 2px;" onclick="openEditModal(${p.row}, '${p.type}', '${p.allItems}')" title="修改項目">✏️</button>
               </div>
             </div>
             <div class="card-body">
@@ -625,6 +625,40 @@
       executeComplete(pDose, dDose, null, clipQty, needleQty); 
     }
 
+    function toggleFullScreen() {
+      var doc = window.document; var docEl = doc.documentElement;
+      var requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+      var cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+      var fsBtn = document.getElementById('fsBtn');
+      if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) { requestFullScreen.call(docEl); fsBtn.innerHTML = "✖"; } 
+      else { cancelFullScreen.call(doc); fsBtn.innerHTML = "⛶"; }
+    }
+
+    let currentEditRow = null; let currentEditType = null;
+    let currentAllItems = "";
+    const dashItemsData = {
+      "胃鏡": [
+        { id: "item_package", label: "好腸胃套餐" },
+        { id: "item_bite", label: "拋棄式口咬器~100元" },
+        { id: "item_thin", label: "經口細鏡~500元" },
+        { id: "item_nasal", label: "經鼻細鏡~500元" },
+        { id: "item_hp", label: "幽門螺旋桿菌檢查~350元" }, { id: "item_biopsy", label: "同意做組織切片檢查或瘜肉切除術" },
+        { id: "item_clip", label: "拋棄式止血夾~800元/支" }, { id: "item_needle", label: "自費拋棄式止血針~800元/次" },
+        { id: "item_refuse", label: "拒絕病理切片檢查" }, { id: "item_painless", label: "無痛胃鏡檢查~3000元" }
+      ],
+      "大腸鏡": [
+        { id: "item_package", label: "好腸胃套餐" },
+        { id: "item_pants", label: "拋棄式檢查褲~100元" }, 
+        { id: "item_co2", label: "二氧化碳CO2大腸鏡充氣~300元" },
+        { id: "item_biopsy", label: "同意做組織切片檢查或瘜肉切除術" }, 
+        { id: "item_clip", label: "拋棄式止血夾(傷口縫合)~800元/支" },
+        { id: "item_needle", label: "拋棄式止血針~800元" }, 
+        { id: "item_refuse", label: "拒絕病理切片檢查" },
+        { id: "item_painless", label: "無痛大腸鏡檢查~4000元" }
+      ]
+    };
+
+    
     function executeComplete(pDose, dDose, hpStatus, clipQty = '0', needleQty = '0') {
       document.getElementById('loadingOverlay').style.display = 'flex';
       
@@ -668,31 +702,15 @@
     }
 
     function openEditModal(row, type, allItemsStr) {
-      currentEditRow = row; 
-      currentEditType = type;
-      
-      // 🌟 核心防呆：確保它絕對是字串，如果是 undefined 就當作空字串處理
-      const safeItemsStr = allItemsStr || ""; 
-      currentAllItems = safeItemsStr;
-      
+      currentEditRow = row; currentEditType = type;
+      currentAllItems = allItemsStr;
       document.getElementById('edit-modal-name').innerText = type + " 項目";
-      const container = document.getElementById('edit-checkbox-container'); 
-      container.innerHTML = '';
-      
+      const container = document.getElementById('edit-checkbox-container'); container.innerHTML = '';
       const items = dashItemsData[type] || [];
       items.forEach(item => {
-        // 🌟 使用受到保護的 safeItemsStr 進行比對，絕對不當機
-        const isChecked = safeItemsStr.includes(item.label) ? "checked" : "";
-        
-        // 🌟 順便加大 checkbox 的間距與大小，平板觸控防誤按
-        container.innerHTML += `
-          <label class="edit-check-item" style="display: flex; align-items: center; margin-bottom: 12px; font-size: 18px; cursor: pointer;">
-            <input type="checkbox" id="edit_${item.id}" value="${item.label}" ${isChecked} style="width: 24px; height: 24px; margin-right: 12px;"> 
-            ${item.label}
-          </label>
-        `;
+        const isChecked = allItemsStr.includes(item.label) ? "checked" : "";
+        container.innerHTML += `<label class="edit-check-item"><input type="checkbox" id="edit_${item.id}" value="${item.label}" ${isChecked}> ${item.label}</label>`;
       });
-      
       document.getElementById('edit-modal').style.display = 'flex';
     }
 
