@@ -511,7 +511,8 @@
               </div>
               <div style="display: flex; align-items: center; gap: 5px;">
                 <span style="font-size:16px; color:#95a5a6;">${p.doctor} 醫師</span>
-                <button class="btn-edit" style="font-size: 20px; padding: 2px;" onclick="openEditModal(${p.row}, '${p.type}', '${p.allItems}')" title="修改項目">✏️</button>
+                // ✅ 這是絕對安全的寫法（注意第三個變數外面的 \` ）
+                <button class="btn-edit" style="font-size: 20px; padding: 2px;" onclick="openEditModal(${p.row}, '${p.type}', \`${p.allItems || ''}\`)" title="修改項目">✏️</button>
               </div>
             </div>
             <div class="card-body">
@@ -668,15 +669,31 @@
     }
 
     function openEditModal(row, type, allItemsStr) {
-      currentEditRow = row; currentEditType = type;
-      currentAllItems = allItemsStr;
+      currentEditRow = row; 
+      currentEditType = type;
+      
+      // 🌟 核心防呆：確保它絕對是字串，如果是 undefined 就當作空字串處理
+      const safeItemsStr = allItemsStr || ""; 
+      currentAllItems = safeItemsStr;
+      
       document.getElementById('edit-modal-name').innerText = type + " 項目";
-      const container = document.getElementById('edit-checkbox-container'); container.innerHTML = '';
+      const container = document.getElementById('edit-checkbox-container'); 
+      container.innerHTML = '';
+      
       const items = dashItemsData[type] || [];
       items.forEach(item => {
-        const isChecked = allItemsStr.includes(item.label) ? "checked" : "";
-        container.innerHTML += `<label class="edit-check-item"><input type="checkbox" id="edit_${item.id}" value="${item.label}" ${isChecked}> ${item.label}</label>`;
+        // 🌟 使用受到保護的 safeItemsStr 進行比對，絕對不當機
+        const isChecked = safeItemsStr.includes(item.label) ? "checked" : "";
+        
+        // 🌟 順便加大 checkbox 的間距與大小，平板觸控防誤按
+        container.innerHTML += `
+          <label class="edit-check-item" style="display: flex; align-items: center; margin-bottom: 12px; font-size: 18px; cursor: pointer;">
+            <input type="checkbox" id="edit_${item.id}" value="${item.label}" ${isChecked} style="width: 24px; height: 24px; margin-right: 12px;"> 
+            ${item.label}
+          </label>
+        `;
       });
+      
       document.getElementById('edit-modal').style.display = 'flex';
     }
 
