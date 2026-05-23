@@ -169,44 +169,47 @@
 </div>
 
   <div id="dose-modal" class="modal-overlay">
-    <div class="modal-content">
-      <h2><span id="modal-name" style="color:#e67e22;"></span> 的大腸鏡結案登記</h2>
+    <div class="modal-content" style="max-height: 95vh; overflow-y: auto; padding: 20px;">
       
-      <div style="background: #fdf2e9; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #f5cba7;">
-        <div style="text-align:center; color:#d35400; font-weight:bold; margin-bottom: 12px; font-size: 16px;">🩸 耗材使用數量 (無施作請保持 0)</div>
+      <h2 style="margin-top: 0; margin-bottom: 10px; font-size: 22px;"><span id="modal-name" style="color:#e67e22;"></span> 的大腸鏡結案登記</h2>
+      
+      <div style="background: #fdf2e9; padding: 10px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #f5cba7;">
+        <div style="text-align:center; color:#d35400; font-weight:bold; margin-bottom: 8px; font-size: 15px;">🩸 耗材使用數量 (無施作請保持 0)</div>
         <div style="display: flex; justify-content: space-around; align-items: center;">
           <div style="text-align: center;">
-            <div style="color: #7f8c8d; font-weight: bold; margin-bottom: 8px;">止血夾</div>
-            <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer; color:#333;" onclick="adjustQty('clip', -1)">➖</button>
-              <div id="val-clip" style="font-size: 26px; font-weight: bold; width: 30px; color: #2c3e50; text-align: center;">0</div>
-              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer; color:#333;" onclick="adjustQty('clip', 1)">➕</button>
+            <div style="color: #7f8c8d; font-weight: bold; margin-bottom: 5px; font-size: 14px;">止血夾</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 32px; height: 32px; font-size: 16px; cursor: pointer; color:#333;" onclick="adjustQty('clip', -1)">➖</button>
+              <div id="val-clip" style="font-size: 22px; font-weight: bold; width: 26px; color: #2c3e50; text-align: center;">0</div>
+              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 32px; height: 32px; font-size: 16px; cursor: pointer; color:#333;" onclick="adjustQty('clip', 1)">➕</button>
             </div>
           </div>
           <div style="text-align: center;">
-            <div style="color: #7f8c8d; font-weight: bold; margin-bottom: 8px;">止血針</div>
-            <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer; color:#333;" onclick="adjustQty('needle', -1)">➖</button>
-              <div id="val-needle" style="font-size: 26px; font-weight: bold; width: 30px; color: #2c3e50; text-align: center;">0</div>
-              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; cursor: pointer; color:#333;" onclick="adjustQty('needle', 1)">➕</button>
+            <div style="color: #7f8c8d; font-weight: bold; margin-bottom: 5px; font-size: 14px;">止血針</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 32px; height: 32px; font-size: 16px; cursor: pointer; color:#333;" onclick="adjustQty('needle', -1)">➖</button>
+              <div id="val-needle" style="font-size: 22px; font-weight: bold; width: 26px; color: #2c3e50; text-align: center;">0</div>
+              <button type="button" style="background: #fff; border: 1px solid #ccc; border-radius: 50%; width: 32px; height: 32px; font-size: 16px; cursor: pointer; color:#333;" onclick="adjustQty('needle', 1)">➕</button>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="input-row">
-        <div class="fake-input-wrap active" id="wrap-val-p" onclick="setActiveInput('val-p', 'wrap-val-p')"><label>P 劑量 (ml)</label><div class="fake-val" id="val-p"></div></div>
-        <div class="fake-input-wrap" id="wrap-val-d" onclick="setActiveInput('val-d', 'wrap-val-d')"><label>D 劑量 (mg)</label><div class="fake-val" id="val-d"></div></div>
+      <div class="input-row" style="margin-bottom: 10px;">
+        <div class="fake-input-wrap active" id="wrap-val-p" onclick="setActiveInput('val-p', 'wrap-val-p')" style="padding: 8px;"><label style="font-size: 14px;">P 劑量 (ml)</label><div class="fake-val" id="val-p" style="font-size: 22px;"></div></div>
+        <div class="fake-input-wrap" id="wrap-val-d" onclick="setActiveInput('val-d', 'wrap-val-d')" style="padding: 8px;"><label style="font-size: 14px;">D 劑量 (mg)</label><div class="fake-val" id="val-d" style="font-size: 22px;"></div></div>
       </div>
-      <div class="keypad">
-        <button class="key" onclick="typeNum('1')">1</button><button class="key" onclick="typeNum('2')">2</button><button class="key" onclick="typeNum('3')">3</button>
-        <button class="key" onclick="typeNum('4')">4</button><button class="key" onclick="typeNum('5')">5</button><button class="key" onclick="typeNum('6')">6</button>
-        <button class="key" onclick="typeNum('7')">7</button><button class="key" onclick="typeNum('8')">8</button><button class="key" onclick="typeNum('9')">9</button>
-        <button class="key" onclick="typeNum('.')">.</button><button class="key" onclick="typeNum('0')">0</button><button class="key key-del" onclick="delNum()">⌫</button>
+      
+      <div class="keypad" style="gap: 6px; margin-bottom: 12px;">
+        <button class="key" style="height:45px; font-size:22px;" onclick="typeNum('1')">1</button><button class="key" style="height:45px; font-size:22px;" onclick="typeNum('2')">2</button><button class="key" style="height:45px; font-size:22px;" onclick="typeNum('3')">3</button>
+        <button class="key" style="height:45px; font-size:22px;" onclick="typeNum('4')">4</button><button class="key" style="height:45px; font-size:22px;" onclick="typeNum('5')">5</button><button class="key" style="height:45px; font-size:22px;" onclick="typeNum('6')">6</button>
+        <button class="key" style="height:45px; font-size:22px;" onclick="typeNum('7')">7</button><button class="key" style="height:45px; font-size:22px;" onclick="typeNum('8')">8</button><button class="key" style="height:45px; font-size:22px;" onclick="typeNum('9')">9</button>
+        <button class="key" style="height:45px; font-size:22px;" onclick="typeNum('.')">.</button><button class="key" style="height:45px; font-size:22px;" onclick="typeNum('0')">0</button><button class="key key-del" style="height:45px; font-size:22px;" onclick="delNum()">⌫</button>
       </div>
-      <div class="modal-btns">
-        <button class="btn-cancel" onclick="closeColonModal()">取消</button>
-        <button class="btn-confirm" onclick="submitColonoscopy()">💾 儲存並結束</button>
+      
+      <div class="modal-btns" style="margin-top: 0;">
+        <button class="btn-cancel" onclick="closeColonModal()" style="padding: 10px;">取消</button>
+        <button class="btn-confirm" onclick="submitColonoscopy()" style="padding: 10px;">💾 儲存並結束</button>
       </div>
     </div>
   </div>
