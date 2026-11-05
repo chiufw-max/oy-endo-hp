@@ -98,6 +98,8 @@
     .key-next { background: #9b59b6; color: white; box-shadow: 0 4px 0 #7d3c98; }
     .key-next:active { background: #7d3c98; box-shadow: 0 0 0 #7d3c98; }
     .vt-slash { font-size: 30px; color: #7f8c8d; padding-bottom: 14px; }
+    /* 平板連點數字不要觸發雙擊放大 */
+    html, body, button, .key, .fake-input-wrap, .vt-wrap, .modal-overlay, .modal-content, .edit-modal-content { touch-action: manipulation; }
     
     .tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; margin-bottom: 25px; min-height: 45px; }
     .tag { padding: 8px 16px; border-radius: 15px; font-size: 20px; font-weight: bold; background: #ecf0f1; color: #34495e; }
@@ -341,7 +343,7 @@
           <div class="vt-slash">/</div>
           <div class="fake-input-wrap vt-wrap" id="wrap-vt-pre-dia" onclick="setVtActive('vt-pre-dia')"><label>舒張壓</label><div class="fake-val" id="vt-pre-dia"></div></div>
           <div class="fake-input-wrap vt-wrap" id="wrap-vt-pre-pulse" onclick="setVtActive('vt-pre-pulse')"><label>脈搏 (次/分)</label><div class="fake-val" id="vt-pre-pulse"></div></div>
-          <div class="fake-input-wrap vt-wrap" id="wrap-vt-pre-spo2" onclick="setVtActive('vt-pre-spo2')"><label>血氧 SpO₂ (%)</label><div class="fake-val" id="vt-pre-spo2"></div></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-pre-spo2" onclick="setVtActive('vt-pre-spo2')"><label>血氧 (%)</label><div class="fake-val" id="vt-pre-spo2"></div></div>
         </div>
       </div>
       <div class="vt-sec" id="vt-sec-post">
@@ -351,7 +353,7 @@
           <div class="vt-slash">/</div>
           <div class="fake-input-wrap vt-wrap" id="wrap-vt-post-dia" onclick="setVtActive('vt-post-dia')"><label>舒張壓</label><div class="fake-val" id="vt-post-dia"></div></div>
           <div class="fake-input-wrap vt-wrap" id="wrap-vt-post-pulse" onclick="setVtActive('vt-post-pulse')"><label>脈搏 (次/分)</label><div class="fake-val" id="vt-post-pulse"></div></div>
-          <div class="fake-input-wrap vt-wrap" id="wrap-vt-post-spo2" onclick="setVtActive('vt-post-spo2')"><label>血氧 SpO₂ (%)</label><div class="fake-val" id="vt-post-spo2"></div></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-post-spo2" onclick="setVtActive('vt-post-spo2')"><label>血氧 (%)</label><div class="fake-val" id="vt-post-spo2"></div></div>
         </div>
       </div>
       <div class="keypad" style="gap: 8px; margin-bottom: 14px;">
@@ -947,8 +949,8 @@
     }
     function renderVitalsStrip(p) {
       if (!isSedation(p.allItems) || !hasPre(p)) return '';
-      let html = `<div class="vitals-strip"><div class="vitals-badge" onclick="openVitalsModal(currentPatients.find(x => x.row === ${p.row}), 'edit')" title="點擊修改"><span class="vb-tag">${hasPost(p) ? '已量測' : '檢查中'}</span><span>前 <b>${vitalsText(p.preBP, p.prePulse, p.preSpO2)}</b></span>`;
-      if (hasPost(p)) html += `<span>後 <b>${vitalsText(p.postBP, p.postPulse, p.postSpO2)}</b></span>`;
+      let html = `<div class="vitals-strip"><div class="vitals-badge" onclick="openVitalsModal(currentPatients.find(x => x.row === ${p.row}), 'edit')" title="點擊修改"><span><span class="vb-tag">檢查前</span> <b>${vitalsText(p.preBP, p.prePulse, p.preSpO2)}</b></span>`;
+      if (hasPost(p)) html += `<span><span class="vb-tag">檢查後</span> <b>${vitalsText(p.postBP, p.postPulse, p.postSpO2)}</b></span>`;
       html += `</div></div>`;
       return html;
     }
