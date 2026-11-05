@@ -80,19 +80,24 @@
     .doc-choice:active { transform: scale(0.97); }
     /* 🌟 麻醉生命徵象 */
     .vitals-strip { margin: 6px 0 10px; }
-    .btn-vitals { width: 100%; height: 54px; border: none; border-radius: 12px; font-size: 20px; font-weight: bold; color: #fff; background: linear-gradient(135deg, #8e44ad, #9b59b6); cursor: pointer; }
-    .btn-vitals:active { transform: scale(0.98); }
+    .btn-row { display: flex; gap: 10px; }
+    .btn-row .btn-complete, .btn-row .btn-start { flex: 1; width: auto; min-width: 0; }
+    .btn-start { height: 75px; border-radius: 18px; font-size: 28px; font-weight: bold; border: none; cursor: pointer; transition: 0.1s; color: #fff; background: linear-gradient(135deg, #8e44ad, #9b59b6); }
+    .btn-start:active { transform: scale(0.97); }
     .vitals-badge { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: #f4ecf7; border: 1px dashed #9b59b6; color: #6c3483; font-size: 16px; cursor: pointer; }
     .vitals-badge b { font-size: 17px; }
     .vitals-badge .vb-tag { background: #9b59b6; color: #fff; border-radius: 8px; padding: 2px 8px; font-size: 14px; }
     .vt-sec { border: 2px solid #e8daef; border-radius: 16px; padding: 14px 16px 6px; margin-bottom: 16px; text-align: left; }
     .vt-sec h3 { margin: 0 0 10px; font-size: 22px; color: #6c3483; }
-    .vt-row { display: flex; gap: 10px; align-items: flex-end; }
-    .vt-field { flex: 1; }
-    .vt-field label { display: block; font-size: 15px; color: #7f8c8d; font-weight: bold; margin-bottom: 4px; }
-    .vt-field input { width: 100%; box-sizing: border-box; height: 62px; font-size: 28px; text-align: center; border: 2px solid #bdc3c7; border-radius: 12px; }
-    .vt-field input:focus { border-color: #9b59b6; outline: none; }
-    .vt-slash { font-size: 30px; color: #7f8c8d; padding-bottom: 12px; }
+    .vt-row { display: flex; gap: 8px; align-items: flex-end; }
+    .vt-wrap { padding: 8px 4px; border-width: 3px; border-radius: 14px; min-width: 0; }
+    .vt-wrap label { font-size: 15px; margin-bottom: 4px; white-space: nowrap; }
+    .vt-wrap .fake-val { font-size: 32px; min-height: 42px; line-height: 42px; }
+    #vitals-modal .vt-wrap.active { border-color: #9b59b6; background: #f4ecf7; }
+    #vitals-modal .vt-wrap.active label { color: #8e44ad; }
+    .key-next { background: #9b59b6; color: white; box-shadow: 0 4px 0 #7d3c98; }
+    .key-next:active { background: #7d3c98; box-shadow: 0 0 0 #7d3c98; }
+    .vt-slash { font-size: 30px; color: #7f8c8d; padding-bottom: 14px; }
     
     .tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; margin-bottom: 25px; min-height: 45px; }
     .tag { padding: 8px 16px; border-radius: 15px; font-size: 20px; font-weight: bold; background: #ecf0f1; color: #34495e; }
@@ -332,22 +337,28 @@
       <div class="vt-sec" id="vt-sec-pre">
         <h3>檢查前</h3>
         <div class="vt-row">
-          <div class="vt-field"><label>收縮壓</label><input type="tel" inputmode="numeric" id="vt-pre-sys" maxlength="3" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-pre-sys" onclick="setVtActive('vt-pre-sys')"><label>收縮壓</label><div class="fake-val" id="vt-pre-sys"></div></div>
           <div class="vt-slash">/</div>
-          <div class="vt-field"><label>舒張壓</label><input type="tel" inputmode="numeric" id="vt-pre-dia" maxlength="3" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-          <div class="vt-field"><label>脈搏 (次/分)</label><input type="tel" inputmode="numeric" id="vt-pre-pulse" maxlength="3" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-          <div class="vt-field"><label>血氧 SpO₂ (%)</label><input type="tel" inputmode="numeric" id="vt-pre-spo2" maxlength="3" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-pre-dia" onclick="setVtActive('vt-pre-dia')"><label>舒張壓</label><div class="fake-val" id="vt-pre-dia"></div></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-pre-pulse" onclick="setVtActive('vt-pre-pulse')"><label>脈搏 (次/分)</label><div class="fake-val" id="vt-pre-pulse"></div></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-pre-spo2" onclick="setVtActive('vt-pre-spo2')"><label>血氧 SpO₂ (%)</label><div class="fake-val" id="vt-pre-spo2"></div></div>
         </div>
       </div>
       <div class="vt-sec" id="vt-sec-post">
         <h3>檢查後</h3>
         <div class="vt-row">
-          <div class="vt-field"><label>收縮壓</label><input type="tel" inputmode="numeric" id="vt-post-sys" maxlength="3" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-post-sys" onclick="setVtActive('vt-post-sys')"><label>收縮壓</label><div class="fake-val" id="vt-post-sys"></div></div>
           <div class="vt-slash">/</div>
-          <div class="vt-field"><label>舒張壓</label><input type="tel" inputmode="numeric" id="vt-post-dia" maxlength="3" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-          <div class="vt-field"><label>脈搏 (次/分)</label><input type="tel" inputmode="numeric" id="vt-post-pulse" maxlength="3" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-          <div class="vt-field"><label>血氧 SpO₂ (%)</label><input type="tel" inputmode="numeric" id="vt-post-spo2" maxlength="3" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-post-dia" onclick="setVtActive('vt-post-dia')"><label>舒張壓</label><div class="fake-val" id="vt-post-dia"></div></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-post-pulse" onclick="setVtActive('vt-post-pulse')"><label>脈搏 (次/分)</label><div class="fake-val" id="vt-post-pulse"></div></div>
+          <div class="fake-input-wrap vt-wrap" id="wrap-vt-post-spo2" onclick="setVtActive('vt-post-spo2')"><label>血氧 SpO₂ (%)</label><div class="fake-val" id="vt-post-spo2"></div></div>
         </div>
+      </div>
+      <div class="keypad" style="gap: 8px; margin-bottom: 14px;">
+<button class="key" style="height:56px; font-size:26px;" onclick="vtKey('1')">1</button><button class="key" style="height:56px; font-size:26px;" onclick="vtKey('2')">2</button><button class="key" style="height:56px; font-size:26px;" onclick="vtKey('3')">3</button>
+<button class="key" style="height:56px; font-size:26px;" onclick="vtKey('4')">4</button><button class="key" style="height:56px; font-size:26px;" onclick="vtKey('5')">5</button><button class="key" style="height:56px; font-size:26px;" onclick="vtKey('6')">6</button>
+<button class="key" style="height:56px; font-size:26px;" onclick="vtKey('7')">7</button><button class="key" style="height:56px; font-size:26px;" onclick="vtKey('8')">8</button><button class="key" style="height:56px; font-size:26px;" onclick="vtKey('9')">9</button>
+<button class="key key-next" style="height:56px; font-size:22px;" onclick="vtKey('next')">下一格 ▶</button><button class="key" style="height:56px; font-size:26px;" onclick="vtKey('0')">0</button><button class="key key-del" style="height:56px; font-size:26px;" onclick="vtKey('del')">⌫</button>
       </div>
       <p id="vitals-modal-hint" style="font-size: 16px; color: #95a5a6; text-align: left; margin: 0 0 20px;">※ 同一位病人今天的胃鏡／大腸鏡卡片會一併記錄</p>
       <div class="modal-btns">
@@ -658,9 +669,10 @@
               ${renderVitalsStrip(p)}
               <div class="tags">${parseTags(p.allItems)}</div>
             </div>
-            <button class="btn-complete" onclick="handleComplete(${p.row}, '${p.type}', '${p.name}')">
-              結束檢查 / 記錄
-            </button>
+            <div class="btn-row">
+              ${renderStartBtn(p)}
+              <button class="btn-complete" onclick="handleComplete(${p.row}, '${p.type}', '${p.name}')">結束檢查</button>
+            </div>
           </div>
         `;
         container.innerHTML += card;
@@ -928,11 +940,13 @@
     function isLastSedationCard(p) { return !currentPatients.some(x => x.row !== p.row && x.idNo === p.idNo && isSedation(x.allItems)); }
     function vitalsText(bp, pulse, spo2) { return `${bp}・${pulse}・${spo2}%`; }
 
+    // 無痛／好腸胃且還沒量檢查前 → 卡片底部多一顆「開始檢查」鈕（與「結束檢查」同一列）
+    function renderStartBtn(p) {
+      if (!isSedation(p.allItems) || hasPre(p)) return '';
+      return `<button class="btn-start" onclick="openVitalsModal(currentPatients.find(x => x.row === ${p.row}), 'pre')">開始檢查</button>`;
+    }
     function renderVitalsStrip(p) {
-      if (!isSedation(p.allItems)) return '';
-      if (!hasPre(p)) {
-        return `<div class="vitals-strip"><button class="btn-vitals" onclick="openVitalsModal(currentPatients.find(x => x.row === ${p.row}), 'pre')">▶ 開始檢查（輸入檢查前生命徵象）</button></div>`;
-      }
+      if (!isSedation(p.allItems) || !hasPre(p)) return '';
       let html = `<div class="vitals-strip"><div class="vitals-badge" onclick="openVitalsModal(currentPatients.find(x => x.row === ${p.row}), 'edit')" title="點擊修改"><span class="vb-tag">${hasPost(p) ? '已量測' : '檢查中'}</span><span>前 <b>${vitalsText(p.preBP, p.prePulse, p.preSpO2)}</b></span>`;
       if (hasPost(p)) html += `<span>後 <b>${vitalsText(p.postBP, p.postPulse, p.postSpO2)}</b></span>`;
       html += `</div></div>`;
@@ -942,10 +956,28 @@
     let vitalsCtx = null; // { p, mode, phases:['pre','post'], onDone }
     function fillVitalsInputs(prefix, bp, pulse, spo2) {
       const m = /^(\d+)\s*\/\s*(\d+)$/.exec(bp || '');
-      document.getElementById(`vt-${prefix}-sys`).value = m ? m[1] : '';
-      document.getElementById(`vt-${prefix}-dia`).value = m ? m[2] : '';
-      document.getElementById(`vt-${prefix}-pulse`).value = pulse || '';
-      document.getElementById(`vt-${prefix}-spo2`).value = spo2 || '';
+      document.getElementById(`vt-${prefix}-sys`).innerText = m ? m[1] : '';
+      document.getElementById(`vt-${prefix}-dia`).innerText = m ? m[2] : '';
+      document.getElementById(`vt-${prefix}-pulse`).innerText = pulse || '';
+      document.getElementById(`vt-${prefix}-spo2`).innerText = spo2 || '';
+    }
+    // 生命徵象專用點按鍵盤：點格子切換、滿 3 位自動跳下一格、「下一格」手動跳
+    let vtActive = null;
+    function vtOrder() { return (vitalsCtx ? vitalsCtx.phases : []).flatMap(ph => ['sys', 'dia', 'pulse', 'spo2'].map(k => `vt-${ph}-${k}`)); }
+    function setVtActive(id) {
+      vtActive = id;
+      document.querySelectorAll('#vitals-modal .vt-wrap').forEach(el => el.classList.toggle('active', el.id === 'wrap-' + id));
+    }
+    function vtKey(k) {
+      if (!vtActive) return;
+      const el = document.getElementById(vtActive);
+      const order = vtOrder();
+      const next = () => { const i = order.indexOf(vtActive); if (i >= 0 && i < order.length - 1) setVtActive(order[i + 1]); };
+      if (k === 'del') { el.innerText = el.innerText.slice(0, -1); return; }
+      if (k === 'next') { next(); return; }
+      if (el.innerText.length >= 3) return;
+      el.innerText += k;
+      if (el.innerText.length === 3) next();
     }
     // mode: 'pre' | 'post' | 'both' | 'edit'（edit = 兩段都顯示、都可改，不強制）
     function openVitalsModal(p, mode, onDone) {
@@ -960,11 +992,11 @@
       document.getElementById('vitals-save-btn').innerText = onDone ? '儲存並繼續結束檢查' : '儲存';
       document.getElementById('vitals-modal-hint').innerText = mode === 'pre' ? '※ 開始檢查前量測。同一位病人今天的胃鏡／大腸鏡卡片會一併記錄' : (mode === 'post' ? '※ 這是這位病人今天最後一張無痛卡片，請輸入檢查後數值' : '※ 同一位病人今天的胃鏡／大腸鏡卡片會一併記錄');
       document.getElementById('vitals-modal').style.display = 'flex';
-      setTimeout(() => { const first = document.getElementById(phases[0] === 'pre' ? 'vt-pre-sys' : 'vt-post-sys'); first.focus(); }, 50);
+      setVtActive(phases[0] === 'pre' ? 'vt-pre-sys' : 'vt-post-sys');
     }
     function closeVitalsModal() { document.getElementById('vitals-modal').style.display = 'none'; vitalsCtx = null; }
     function readVitalsInputs(prefix) {
-      const g = id => document.getElementById(`vt-${prefix}-${id}`).value.trim();
+      const g = id => document.getElementById(`vt-${prefix}-${id}`).innerText.trim();
       const sys = g('sys'), dia = g('dia'), pulse = g('pulse'), spo2 = g('spo2');
       const filled = [sys, dia, pulse, spo2].filter(Boolean).length;
       return { sys, dia, pulse, spo2, complete: filled === 4, empty: filled === 0, bp: `${sys}/${dia}` };
