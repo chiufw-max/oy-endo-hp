@@ -72,6 +72,9 @@
     .pid-field label { display: block; font-size: 22px; color: #2c3e50; font-weight: bold; margin-bottom: 8px; }
     .pid-field input { width: 100%; box-sizing: border-box; height: 70px; font-size: 32px; padding: 0 18px; border: 2px solid #bdc3c7; border-radius: 15px; font-family: monospace; letter-spacing: 2px; }
     .pid-field input:focus { border-color: #3498db; outline: none; }
+    .name-btn { cursor: pointer; border-bottom: 2px dashed #bdc3c7; user-select: none; }
+    .name-btn:active { opacity: 0.6; }
+    #name-input { font-family: inherit; letter-spacing: 1px; }
     .doc-btn { cursor: pointer; font-size: 16px; color: #7f8c8d; padding: 3px 10px; border-radius: 10px; border: 1px dashed #bdc3c7; background: #fafafa; user-select: none; white-space: nowrap; }
     .doc-btn:active { transform: scale(0.95); background: #ecf0f1; }
     .doc-choice-list { display: flex; flex-direction: column; gap: 14px; margin: 10px 0 24px; }
@@ -318,6 +321,21 @@
       <div class="modal-btns">
         <button class="btn-cancel" onclick="closePidModal()">取消</button>
         <button class="btn-confirm" style="background:#3498db;" onclick="savePidModal()">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="name-modal" class="modal-overlay">
+    <div class="edit-modal-content">
+      <h2>修正病患姓名</h2>
+      <div class="pid-field">
+        <label>姓名（目前：<span id="name-modal-old" style="color:#3498db;"></span>）</label>
+        <input type="text" id="name-input" maxlength="20" autocomplete="off">
+      </div>
+      <p style="font-size: 16px; color: #95a5a6; text-align: left; margin: 0 0 20px;">※ 同一位病人今天的胃鏡／大腸鏡卡片會一併更新，不需要重簽</p>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="closeNameModal()">取消</button>
+        <button class="btn-confirm" style="background:#3498db;" onclick="saveNameModal()">儲存</button>
       </div>
     </div>
   </div>
@@ -660,7 +678,7 @@
             </div>
             <div class="card-body">
               <div class="patient-name" style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; line-height: 1.2;">
-                <span>${p.name}</span>
+                <span class="name-btn" onclick="openNameModal(${p.row}, '${p.name}')" title="點擊修正姓名">${p.name}</span>
                 ${historyHtml}
               </div>
               <div class="patient-id">
@@ -880,6 +898,30 @@
     }
 
     function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
+
+    // ===== 修正姓名（打錯字不用重簽）=====
+    let currentNameRow = null;
+    function openNameModal(row, name) {
+      currentNameRow = row;
+      document.getElementById('name-modal-old').innerText = name;
+      document.getElementById('name-input').value = name;
+      document.getElementById('name-modal').style.display = 'flex';
+      setTimeout(() => { const el = document.getElementById('name-input'); el.focus(); el.select(); }, 50);
+    }
+    function closeNameModal() { document.getElementById('name-modal').style.display = 'none'; currentNameRow = null; }
+    function saveNameModal() {
+      const name = document.getElementById('name-input').value.trim();
+      if (!name) { alert("姓名不可為空"); return; }
+      document.getElementById('loadingOverlay').style.display = 'flex';
+      callGAS("updateName", { rowNum: currentNameRow, name: name })
+        .then(res => {
+          document.getElementById('loadingOverlay').style.display = 'none';
+          if (res.status === 'success') { closeNameModal(); loadPatients(); } else { alert(res.message); }
+        })
+        .catch(err => {
+          document.getElementById('loadingOverlay').style.display = 'none'; alert("儲存失敗：" + err.message);
+        });
+    }
 
     // ===== 修正身分證字號 / 病歷號 =====
     let currentPidRow = null;
